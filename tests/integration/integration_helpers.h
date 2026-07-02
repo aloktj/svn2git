@@ -14,6 +14,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <unistd.h> // mkdtemp lives here on macOS (POSIX puts it in stdlib.h)
+
 #include <cstdlib>
 #include <string>
 

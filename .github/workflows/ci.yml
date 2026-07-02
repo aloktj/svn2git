@@ -98,11 +98,16 @@ jobs:
       - name: Build image
         run: docker build --tag svn2git:ci .
 
+      # Install the Trivy CLI directly instead of the marketplace action:
+      # the action tag failed to resolve in this environment, and the CLI
+      # gives the same scan with one less supply-chain dependency.
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b /usr/local/bin
+          trivy --version
+
       - name: Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@0.24.0
-        with:
-          image-ref: svn2git:ci
-          format: table
-          exit-code: '1'
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
+        run: |
+          trivy image --format table --exit-code 1 \
+            --severity CRITICAL,HIGH --ignore-unfixed svn2git:ci
