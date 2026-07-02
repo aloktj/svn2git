@@ -1,0 +1,23 @@
+# svn2git enhanced — formatting rules for the validation/compliance sources
+# (the legacy Qt converter sources keep their historical formatting and are
+# not covered by the CI format check)
+BasedOnStyle: WebKit
+Standard: c++17
+ColumnLimit: 90
+IndentWidth: 4
+UseTab: Never
+BreakBeforeBraces: WebKit
+PointerAlignment: Left
+AlignAfterOpenBracket: Align
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+BreakConstructorInitializers: BeforeComma
+ConstructorInitializerIndentWidth: 4
+Cpp11BracedListStyle: true
+FixNamespaceComments: true
+IndentCaseLabels: false
+NamespaceIndentation: None
+SortIncludes: CaseSensitive
+IncludeBlocks: Preserve
+SpaceBeforeParens: ControlStatements

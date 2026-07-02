@@ -5,3 +5,11 @@ svn-all-fast-export
 svn-all-fast-export.exe
 src/local-config.pri
 /build/
+/build-*/
+/cmake-build*/
+audit.log
+error_report.txt
+svn2git.log
+svn_to_git_mapping.json
+traceability.db
+authors-generated.txt

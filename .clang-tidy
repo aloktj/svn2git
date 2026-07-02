@@ -1,0 +1,17 @@
+# svn2git enhanced — static analysis profile for the validation sources.
+# Focused on correctness and safety-relevant checks (EN 50128 mindset):
+# bug-prone constructs, undefined behavior, resource leaks.
+Checks: >
+  bugprone-*,
+  clang-analyzer-*,
+  performance-*,
+  modernize-use-nullptr,
+  modernize-use-override,
+  modernize-loop-convert,
+  readability-braces-around-statements,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-exception-escape,
+  -readability-braces-around-statements
+WarningsAsErrors: 'clang-analyzer-*,bugprone-use-after-move'
+HeaderFilterRegex: 'include/svn2git/.*'
+FormatStyle: file

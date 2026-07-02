@@ -1,0 +1,9 @@
+# Sample author mapping for svn2git tests
+# Format: svnusername = Full Name <email@example.com>
+
+jsmith = John Smith <john.smith@example.com>
+mmustermann = Max Mustermann <max.mustermann@example.com>
+akowalska = Anna Kowalska <anna.kowalska@example.com>
+
+# Build/automation accounts
+buildbot = Build Bot <buildbot@ci.example.com>

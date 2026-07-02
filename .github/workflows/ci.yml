@@ -1,0 +1,108 @@
+# svn2git enhanced — continuous integration
+#
+# Build + test on Linux and macOS, lint the enhanced sources, security-scan
+# the Docker image with Trivy, and verify the Docker image builds.
+
+name: CI
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build & test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            cmake g++ libspdlog-dev nlohmann-json3-dev libsqlite3-dev \
+            catch2 subversion git
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install cmake spdlog nlohmann-json sqlite catch2 subversion
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Smoke-test the CLI
+        run: |
+          ./build/svn2git-validate --help
+          sh tests/fixtures/create-test-svn-repo.sh /tmp/ci-svn > /tmp/ci-url.txt
+          ./build/svn2git-validate --validate-authors-only \
+            --authors tests/fixtures/authors.txt "$(cat /tmp/ci-url.txt)"
+
+  lint:
+    name: Lint (clang-format + clang-tidy)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            cmake g++ clang-format clang-tidy \
+            libspdlog-dev nlohmann-json3-dev libsqlite3-dev catch2
+
+      - name: clang-format (enhanced sources only)
+        run: |
+          clang-format --dry-run --Werror \
+            include/svn2git/*.h \
+            src/logging.cpp src/command_runner.cpp src/error_reporter.cpp \
+            src/author_validator.cpp src/rules_validator.cpp \
+            src/config_validator.cpp src/revision_mapper.cpp \
+            src/audit_logger.cpp src/svn_validator.cpp src/git_validator.cpp \
+            src/svn_to_git_app.cpp \
+            tests/unit/*.cpp tests/integration/*.cpp tests/integration/*.h
+
+      - name: clang-tidy (library sources)
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          run-clang-tidy -p build -quiet \
+            "src/(logging|command_runner|error_reporter|author_validator|rules_validator|config_validator|revision_mapper|audit_logger|svn_validator|git_validator|svn_to_git_app)\.cpp$"
+
+  docker:
+    name: Docker build & Trivy scan
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build --tag svn2git:ci .
+
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: svn2git:ci
+          format: table
+          exit-code: '1'
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true

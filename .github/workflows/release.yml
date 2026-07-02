@@ -1,0 +1,58 @@
+# svn2git enhanced — automated releases
+#
+# On every v* tag: rebuild, re-run the full test suite, package the
+# validation CLI with its documentation/fixtures, and publish a GitHub
+# release with the tarball and its SHA-256 checksum.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & publish release
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            cmake g++ libspdlog-dev nlohmann-json3-dev libsqlite3-dev \
+            catch2 subversion git
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test (release gate)
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Package
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PKG="svn2git-validate-${VERSION}-linux-x86_64"
+          mkdir -p "dist/${PKG}"
+          cp build/svn2git-validate "dist/${PKG}/"
+          cp README.md LICENSE "dist/${PKG}/"
+          cp -r samples "dist/${PKG}/samples"
+          cp tests/fixtures/authors.txt tests/fixtures/test.rules "dist/${PKG}/samples/"
+          tar -C dist -czf "dist/${PKG}.tar.gz" "${PKG}"
+          (cd dist && sha256sum "${PKG}.tar.gz" > "${PKG}.tar.gz.sha256")
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+          generate_release_notes: true
