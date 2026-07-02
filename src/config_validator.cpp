@@ -142,15 +142,18 @@ ConfigCheck ConfigValidator::validateYamlFile()
 
         // Count only unescaped double quotes so valid YAML like
         // key: "a\"b" is not flagged (backslash-escape per YAML
-        // double-quoted scalar rules).
+        // double-quoted scalar rules). A while loop keeps the position
+        // variable mutations out of a for-loop body (MISRA-style rule).
         long unescapedQuotes = 0;
-        for (std::size_t i = 0; i < content.size(); ++i) {
-            if (content[i] == '\\') {
-                ++i; // skip the escaped character
+        std::size_t position = 0;
+        while (position < content.size()) {
+            if (content[position] == '\\') {
+                position += 2; // skip the backslash and the escaped character
                 continue;
             }
-            if (content[i] == '"')
+            if (content[position] == '"')
                 ++unescapedQuotes;
+            ++position;
         }
         if (unescapedQuotes % 2 != 0)
             check.findings.push_back(locus + ": unbalanced double quote");
