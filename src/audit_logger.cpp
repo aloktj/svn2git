@@ -46,8 +46,10 @@ std::string detectOperator()
 }
 
 /// Deterministic migration ID: mig-<YYYYMMDDHHMMSS>-<repo-hash6>.
-/// FNV-1a over the repository name gives a stable, collision-resistant
-/// suffix without introducing randomness (reproducibility requirement).
+/// FNV-1a over the repository name gives a stable, non-cryptographic
+/// suffix that distinguishes repositories without introducing randomness
+/// (reproducibility requirement). It carries no integrity guarantees —
+/// tamper evidence comes from signAuditLog(), not from this ID.
 std::string makeMigrationId(const std::string& startedAtIso,
                             const std::string& repositoryName)
 {

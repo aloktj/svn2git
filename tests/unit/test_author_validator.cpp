@@ -7,6 +7,8 @@
 
 #include "svn2git/author_validator.h"
 
+#include "unit_helpers.h"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdio>
@@ -43,12 +45,12 @@ svn2git::Runner fakeSvn(int exitCode, std::string output)
     };
 }
 
-/// Temporary authors file, deleted on scope exit.
+/// Temporary authors file with a unique per-test path (safe under
+/// parallel test execution), deleted on scope exit.
 struct TempAuthorsFile {
     std::string path;
-    explicit TempAuthorsFile(const std::string& content,
-                             std::string name = "test_authors_tmp.txt")
-        : path(std::move(name))
+    explicit TempAuthorsFile(const std::string& content)
+        : path(testhelpers::uniqueTempPath("svn2git-authors", ".txt"))
     {
         std::ofstream file(path, std::ios::trunc);
         file << content;

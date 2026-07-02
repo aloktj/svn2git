@@ -19,32 +19,35 @@
 #include "CommandLineParser.h"
 
 #include <QDebug>
-#include <QTextStream>
-#include <QStringList>
-#include <QList>
 #include <QHash>
+#include <QList>
+#include <QStringList>
+#include <QTextStream>
 
-CommandLineParser *CommandLineParser::self = 0;
+CommandLineParser* CommandLineParser::self = 0;
 
-class CommandLineParser::Private
-{
+class CommandLineParser::Private {
 public:
-    Private(int argc, char **argv);
+    Private(int argc, char** argv);
 
     // functions
-    void addDefinitions(const CommandLineOption * options);
-    void setArgumentDefinition(const char *definition);
+    void addDefinitions(const CommandLineOption* options);
+    void setArgumentDefinition(const char* definition);
     void parse();
 
     // variables;
     const int argumentCount;
-    char ** const argumentStrings;
+    char** const argumentStrings;
     bool dirty;
     int requiredArguments;
     QString argumentDefinition;
 
     struct OptionDefinition {
-        OptionDefinition() : optionalParameters(0), requiredParameters(0) { }
+        OptionDefinition()
+            : optionalParameters(0)
+            , requiredParameters(0)
+        {
+        }
         QString name;
         QString comment;
         QChar shortName;
@@ -65,23 +68,27 @@ public:
     QList<QString> errors;
 };
 
-
-CommandLineParser::Private::Private(int argc, char **argv)
-    : argumentCount(argc), argumentStrings(argv), dirty(true),
-    requiredArguments(0)
+CommandLineParser::Private::Private(int argc, char** argv)
+    : argumentCount(argc)
+    , argumentStrings(argv)
+    , dirty(true)
+    , requiredArguments(0)
 {
 }
 
-void CommandLineParser::Private::addDefinitions(const CommandLineOption * options)
+void CommandLineParser::Private::addDefinitions(const CommandLineOption* options)
 {
-    for (int i=0; options[i].specification != 0; i++) {
+    for (int i = 0; options[i].specification != 0; i++) {
         OptionDefinition definition;
         QString option = QString::fromLatin1(options[i].specification);
         // options with optional params are written as "--option required[, optional]
-        if (option.indexOf(QLatin1Char(',')) >= 0 && ( option.indexOf(QLatin1Char('[')) < 0 || option.indexOf(QLatin1Char(']')) < 0) ) {
+        if (option.indexOf(QLatin1Char(',')) >= 0
+            && (option.indexOf(QLatin1Char('[')) < 0
+                || option.indexOf(QLatin1Char(']')) < 0)) {
             QStringList optionParts = option.split(QLatin1Char(','), Qt::SkipEmptyParts);
             if (optionParts.count() != 2) {
-                qWarning() << "WARN: option definition '" << option << "' is faulty; only one ',' allowed";
+                qWarning() << "WARN: option definition '" << option
+                           << "' is faulty; only one ',' allowed";
                 continue;
             }
             foreach (QString s, optionParts) {
@@ -91,20 +98,23 @@ void CommandLineParser::Private::addDefinitions(const CommandLineOption * option
                 else if (s.startsWith(QLatin1String("-")) && s.length() > 1)
                     definition.shortName = s.at(1);
                 else {
-                    qWarning() << "WARN: option definition '" << option << "' is faulty; the option should start with a -";
+                    qWarning() << "WARN: option definition '" << option
+                               << "' is faulty; the option should start with a -";
                     break;
                 }
             }
-        }
-        else if (option.startsWith(QLatin1String("--")) && option.length() > 2)
+        } else if (option.startsWith(QLatin1String("--")) && option.length() > 2)
             definition.name = option.mid(2);
         else
-            qWarning() << "WARN: option definition '" << option << "' has unrecognized format. See the api docs for CommandLineParser for a howto";
+            qWarning() << "WARN: option definition '" << option
+                       << "' has unrecognized format. See the api docs for "
+                          "CommandLineParser for a howto";
 
-        if(definition.name.isEmpty())
+        if (definition.name.isEmpty())
             continue;
         if (option.indexOf(QLatin1Char(' ')) > 0) {
-            QStringList optionParts = definition.name.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+            QStringList optionParts
+                = definition.name.split(QLatin1Char(' '), Qt::SkipEmptyParts);
             definition.name = optionParts[0];
             bool first = true;
             foreach (QString s, optionParts) {
@@ -123,29 +133,30 @@ void CommandLineParser::Private::addDefinitions(const CommandLineOption * option
         definition.comment = QString::fromLatin1(options[i].description);
         definitions << definition;
     }
-/*
-    foreach (OptionDefinition def, definitions) {
-        qDebug() << "definition:" << (def.shortName != 0 ? def.shortName : QChar(32)) << "|" << def.name << "|" << def.comment
-            << "|" << def.requiredParameters << "+" << def.optionalParameters;
-    }
-*/
+    /*
+        foreach (OptionDefinition def, definitions) {
+            qDebug() << "definition:" << (def.shortName != 0 ? def.shortName : QChar(32))
+       << "|" << def.name << "|" << def.comment
+                << "|" << def.requiredParameters << "+" << def.optionalParameters;
+        }
+    */
 
     dirty = true;
 }
 
-void CommandLineParser::Private::setArgumentDefinition(const char *defs)
+void CommandLineParser::Private::setArgumentDefinition(const char* defs)
 {
     requiredArguments = 0;
     argumentDefinition = QString::fromLatin1(defs);
-    QStringList optionParts = argumentDefinition.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    QStringList optionParts
+        = argumentDefinition.split(QLatin1Char(' '), Qt::SkipEmptyParts);
     bool inArg = false;
     foreach (QString s, optionParts) {
         s = s.trimmed();
         if (s[0].unicode() == '<') {
             inArg = true;
             requiredArguments++;
-        }
-        else if (s[0].unicode() == '[')
+        } else if (s[0].unicode() == '[')
             inArg = true;
         if (s.endsWith(QLatin1Char('>')))
             inArg = false;
@@ -165,11 +176,15 @@ void CommandLineParser::Private::parse()
     dirty = false;
 
     class OptionProcessor {
-      public:
-        OptionProcessor(Private *d) : clp(d) { }
+    public:
+        OptionProcessor(Private* d)
+            : clp(d)
+        {
+        }
 
-        void next(Private::ParsedOption &option) {
-            if (! option.option.isEmpty()) {
+        void next(Private::ParsedOption& option)
+        {
+            if (!option.option.isEmpty()) {
                 // find the definition to match.
                 OptionDefinition def;
                 foreach (Private::OptionDefinition definition, clp->definitions) {
@@ -178,21 +193,24 @@ void CommandLineParser::Private::parse()
                         break;
                     }
                 }
-                if (! def.name.isEmpty() && def.requiredParameters >= option.parameters.count() &&
-                        def.requiredParameters + def.optionalParameters <= option.parameters.count())
+                if (!def.name.isEmpty()
+                    && def.requiredParameters >= option.parameters.count()
+                    && def.requiredParameters + def.optionalParameters
+                        <= option.parameters.count())
                     clp->options.insert(option.option, option);
                 else if (!clp->undefinedOptions.contains(option.option))
                     clp->undefinedOptions << option.option;
                 else
-                    clp->errors.append(QLatin1String("Not enough arguments passed for option `")
-                            + option.option +QLatin1Char('\''));
+                    clp->errors.append(
+                        QLatin1String("Not enough arguments passed for option `")
+                        + option.option + QLatin1Char('\''));
             }
             option.option.clear();
             option.parameters.clear();
         }
 
-      private:
-        CommandLineParser::Private *clp;
+    private:
+        CommandLineParser::Private* clp;
     };
     OptionProcessor processor(this);
 
@@ -211,7 +229,7 @@ void CommandLineParser::Private::parse()
                 int end = arg.indexOf(QLatin1Char('='));
                 option.option = arg.mid(2, end - 2);
                 if (end > 0)
-                    option.parameters << arg.mid(end+1);
+                    option.parameters << arg.mid(end + 1);
                 continue;
             }
             if (arg[0].unicode() == '-' && arg.length() > 1) {
@@ -224,14 +242,16 @@ void CommandLineParser::Private::parse()
                             currentDefinition = definition;
                             option.option = definition.name;
 
-                            if (definition.requiredParameters == 1 && arg.length() >= x+2) {
-                                option.parameters << arg.mid(x+1, arg.length());
+                            if (definition.requiredParameters == 1
+                                && arg.length() >= x + 2) {
+                                option.parameters << arg.mid(x + 1, arg.length());
                                 x = arg.length();
                             }
                             break;
                         }
                     }
-                    if (!resolved) { // nothing found; copy char so it ends up in unrecognized
+                    if (!resolved) { // nothing found; copy char so it ends up in
+                                     // unrecognized
                         option.option = arg[x];
                         processor.next(option);
                     }
@@ -239,7 +259,7 @@ void CommandLineParser::Private::parse()
                 continue;
             }
         }
-        if (! option.option.isEmpty()) {
+        if (!option.option.isEmpty()) {
             if (currentDefinition.name != option.option) {
                 // find the definition to match.
                 foreach (OptionDefinition definition, definitions) {
@@ -249,7 +269,9 @@ void CommandLineParser::Private::parse()
                     }
                 }
             }
-            if (currentDefinition.requiredParameters + currentDefinition.optionalParameters <= option.parameters.count())
+            if (currentDefinition.requiredParameters
+                    + currentDefinition.optionalParameters
+                <= option.parameters.count())
                 processor.next(option);
         }
         if (option.option.isEmpty())
@@ -260,28 +282,28 @@ void CommandLineParser::Private::parse()
     processor.next(option);
 
     if (requiredArguments > arguments.count())
-        errors.append(QLatin1String("Not enough arguments, usage: ") + QString::fromLocal8Bit(argumentStrings[0])
-                + QLatin1Char(' ') + argumentDefinition);
+        errors.append(QLatin1String("Not enough arguments, usage: ")
+                      + QString::fromLocal8Bit(argumentStrings[0]) + QLatin1Char(' ')
+                      + argumentDefinition);
 
-/*
-    foreach (QString key, options.keys()) {
-        ParsedOption p = options[key];
-        qDebug() << "-> " << p.option;
-        foreach (QString v, p.parameters)
-            qDebug() << "   +" << v;
-    }
-    qDebug() << "---";
-    foreach (QString arg, arguments) {
-        qDebug() << arg;
-    }
-*/
+    /*
+        foreach (QString key, options.keys()) {
+            ParsedOption p = options[key];
+            qDebug() << "-> " << p.option;
+            foreach (QString v, p.parameters)
+                qDebug() << "   +" << v;
+        }
+        qDebug() << "---";
+        foreach (QString arg, arguments) {
+            qDebug() << arg;
+        }
+    */
 }
 
 // -----------------------------------
 
-
 // static
-void CommandLineParser::init(int argc, char **argv)
+void CommandLineParser::init(int argc, char** argv)
 {
     if (self)
         delete self;
@@ -289,7 +311,7 @@ void CommandLineParser::init(int argc, char **argv)
 }
 
 // static
-void CommandLineParser::addOptionDefinitions(const CommandLineOption * optionList)
+void CommandLineParser::addOptionDefinitions(const CommandLineOption* optionList)
 {
     if (!self) {
         qWarning() << "WARN: CommandLineParser:: Use init before addOptionDefinitions!";
@@ -299,13 +321,13 @@ void CommandLineParser::addOptionDefinitions(const CommandLineOption * optionLis
 }
 
 // static
-CommandLineParser *CommandLineParser::instance()
+CommandLineParser* CommandLineParser::instance()
 {
     return self;
 }
 
 // static
-void CommandLineParser::setArgumentDefinition(const char *definition)
+void CommandLineParser::setArgumentDefinition(const char* definition)
 {
     if (!self) {
         qWarning() << "WARN: CommandLineParser:: Use init before addOptionDefinitions!";
@@ -314,8 +336,7 @@ void CommandLineParser::setArgumentDefinition(const char *definition)
     self->d->setArgumentDefinition(definition);
 }
 
-
-CommandLineParser::CommandLineParser(int argc, char **argv)
+CommandLineParser::CommandLineParser(int argc, char** argv)
     : d(new Private(argc, argv))
 {
 }
@@ -325,7 +346,7 @@ CommandLineParser::~CommandLineParser()
     delete d;
 }
 
-void CommandLineParser::usage(const QString &name, const QString &argumentDescription)
+void CommandLineParser::usage(const QString& name, const QString& argumentDescription)
 {
 #if QT_VERSION >= 0x060000
     QTextStream cout(stdout, QIODeviceBase::WriteOnly);
@@ -333,11 +354,11 @@ void CommandLineParser::usage(const QString &name, const QString &argumentDescri
     QTextStream cout(stdout, QIODevice::WriteOnly);
 #endif
     cout << "Usage: " << d->argumentStrings[0];
-    if (! name.isEmpty())
+    if (!name.isEmpty())
         cout << " " << name;
     if (d->definitions.count())
         cout << " [OPTION]";
-    if (! argumentDescription.isEmpty())
+    if (!argumentDescription.isEmpty())
         cout << " " << argumentDescription;
     cout << Qt::endl << Qt::endl;
 
@@ -356,7 +377,7 @@ void CommandLineParser::usage(const QString &name, const QString &argumentDescri
         cout << definition.name;
         for (int i = definition.name.length(); i <= commandLength; i++)
             cout << ' ';
-         cout << definition.comment << Qt::endl;
+        cout << definition.comment << Qt::endl;
     }
 }
 
@@ -366,7 +387,7 @@ QStringList CommandLineParser::options() const
     return d->options.keys();
 }
 
-bool CommandLineParser::contains(const QString & key) const
+bool CommandLineParser::contains(const QString& key) const
 {
     d->parse();
     return d->options.contains(key);
@@ -384,7 +405,8 @@ QStringList CommandLineParser::undefinedOptions() const
     return d->undefinedOptions;
 }
 
-QString CommandLineParser::optionArgument(const QString &optionName, const QString &defaultValue) const
+QString CommandLineParser::optionArgument(const QString& optionName,
+                                          const QString& defaultValue) const
 {
     QStringList answer = optionArguments(optionName);
     if (answer.isEmpty())
@@ -392,9 +414,9 @@ QString CommandLineParser::optionArgument(const QString &optionName, const QStri
     return answer.first();
 }
 
-QStringList CommandLineParser::optionArguments(const QString &optionName) const
+QStringList CommandLineParser::optionArguments(const QString& optionName) const
 {
-    if (! contains(optionName))
+    if (!contains(optionName))
         return QStringList();
     Private::ParsedOption po = d->options[optionName];
     return po.parameters;

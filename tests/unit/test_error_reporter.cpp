@@ -4,6 +4,8 @@
 
 #include "svn2git/error_reporter.h"
 
+#include "unit_helpers.h"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdio>
@@ -104,7 +106,7 @@ TEST_CASE("formatting includes code, message, context and suggestion", "[error-r
 
 TEST_CASE("report file is generated with all entries", "[error-reporter]")
 {
-    FileGuard guard {"test_error_report.txt"};
+    FileGuard guard {testhelpers::uniqueTempPath("svn2git-error-report", ".txt")};
 
     ErrorReporter reporter;
     reporter.report(ErrorCode::CommitCountMismatch, "expected 10, got 9");
@@ -119,7 +121,7 @@ TEST_CASE("report file is generated with all entries", "[error-reporter]")
 
 TEST_CASE("empty report notes the absence of errors", "[error-reporter]")
 {
-    FileGuard guard {"test_empty_report.txt"};
+    FileGuard guard {testhelpers::uniqueTempPath("svn2git-empty-report", ".txt")};
 
     ErrorReporter reporter;
     REQUIRE(reporter.generateReport(guard.path));

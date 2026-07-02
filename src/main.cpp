@@ -16,20 +16,20 @@
  */
 
 #include <QCoreApplication>
+#include <QDebug>
 #include <QFile>
 #include <QStringList>
 #include <QTextStream>
-#include <QDebug>
 
 #include <limits.h>
 #include <stdio.h>
 
 #include "CommandLineParser.h"
-#include "ruleparser.h"
 #include "repository.h"
+#include "ruleparser.h"
 #include "svn.h"
 
-QHash<QByteArray, QByteArray> loadIdentityMapFile(const QString &fileName)
+QHash<QByteArray, QByteArray> loadIdentityMapFile(const QString& fileName)
 {
     QHash<QByteArray, QByteArray> result;
     if (fileName.isEmpty())
@@ -37,8 +37,8 @@ QHash<QByteArray, QByteArray> loadIdentityMapFile(const QString &fileName)
 
     QFile file(fileName);
     if (!file.open(QIODevice::ReadOnly)) {
-        fprintf(stderr, "Could not open file %s: %s",
-                qPrintable(fileName), qPrintable(file.errorString()));
+        fprintf(stderr, "Could not open file %s: %s", qPrintable(fileName),
+                qPrintable(file.errorString()));
         return result;
     }
 
@@ -51,7 +51,7 @@ QHash<QByteArray, QByteArray> loadIdentityMapFile(const QString &fileName)
         line = line.trimmed();
         int space = line.indexOf(' ');
         if (space == -1)
-            continue;           // invalid line
+            continue; // invalid line
 
         // Support git-svn author files, too
         // - svn2git native:  loginname Joe User <user@example.com>
@@ -61,8 +61,8 @@ QHash<QByteArray, QByteArray> loadIdentityMapFile(const QString &fileName)
         if (rightspace == -1) {
             rightspace = space;
         } else {
-          leftspace = rightspace;
-          rightspace += 2;
+            leftspace = rightspace;
+            rightspace += 2;
         }
 
         QByteArray realname = line.mid(rightspace).trimmed();
@@ -73,57 +73,63 @@ QHash<QByteArray, QByteArray> loadIdentityMapFile(const QString &fileName)
     };
     file.close();
 
-    if(!found_author) {
-        fprintf(stderr, "No authors found in identity-map file. Check supported formats.\n");
+    if (!found_author) {
+        fprintf(stderr,
+                "No authors found in identity-map file. Check supported formats.\n");
     }
     return result;
 }
 
-QSet<int> loadRevisionsFile( const QString &fileName, Svn &svn )
+QSet<int> loadRevisionsFile(const QString& fileName, Svn& svn)
 {
     QRegExp revint("(\\d+)\\s*(?:-\\s*(\\d+|HEAD))?");
     QSet<int> revisions;
-    if(fileName.isEmpty())
+    if (fileName.isEmpty())
         return revisions;
 
     QFile file(fileName);
-    if( !file.open(QIODevice::ReadOnly)) {
-        fprintf(stderr, "Could not open file %s: %s\n", qPrintable(fileName), qPrintable(file.errorString()));
+    if (!file.open(QIODevice::ReadOnly)) {
+        fprintf(stderr, "Could not open file %s: %s\n", qPrintable(fileName),
+                qPrintable(file.errorString()));
         return revisions;
     }
 
     bool ok;
-    while(!file.atEnd()) {
+    while (!file.atEnd()) {
         QByteArray line = file.readLine().trimmed();
         revint.indexIn(line);
-        if( revint.cap(2).isEmpty() ) {
+        if (revint.cap(2).isEmpty()) {
             int rev = revint.cap(1).toInt(&ok);
-            if(ok) {
+            if (ok) {
                 revisions.insert(rev);
             } else {
-                fprintf(stderr, "Unable to convert %s to int, skipping revision.\n", qPrintable(QString(line)));
+                fprintf(stderr, "Unable to convert %s to int, skipping revision.\n",
+                        qPrintable(QString(line)));
             }
-        } else if( revint.captureCount() == 2 ) {
+        } else if (revint.captureCount() == 2) {
             int rev = revint.cap(1).toInt(&ok);
-            if(!ok) {
-                fprintf(stderr, "Unable to convert %s (%s) to int, skipping revisions.\n", qPrintable(revint.cap(1)), qPrintable(QString(line)));
+            if (!ok) {
+                fprintf(stderr, "Unable to convert %s (%s) to int, skipping revisions.\n",
+                        qPrintable(revint.cap(1)), qPrintable(QString(line)));
                 continue;
             }
             int lastrev = 0;
-            if(revint.cap(2) == "HEAD") {
+            if (revint.cap(2) == "HEAD") {
                 lastrev = svn.youngestRevision();
                 ok = true;
             } else {
                 lastrev = revint.cap(2).toInt(&ok);
             }
-            if(!ok) {
-                fprintf(stderr, "Unable to convert %s (%s) to int, skipping revisions.\n", qPrintable(revint.cap(2)), qPrintable(QString(line)));
+            if (!ok) {
+                fprintf(stderr, "Unable to convert %s (%s) to int, skipping revisions.\n",
+                        qPrintable(revint.cap(2)), qPrintable(QString(line)));
                 continue;
             }
-            for(; rev <= lastrev; ++rev )
+            for (; rev <= lastrev; ++rev)
                 revisions.insert(rev);
         } else {
-            fprintf(stderr, "Unable to convert %s to int, skipping revision.\n", qPrintable(QString(line)));
+            fprintf(stderr, "Unable to convert %s to int, skipping revision.\n",
+                    qPrintable(QString(line)));
         }
     }
     file.close();
@@ -133,39 +139,45 @@ QSet<int> loadRevisionsFile( const QString &fileName, Svn &svn )
 static const CommandLineOption options[] = {
     {"--identity-map FILENAME", "provide map between svn username and email"},
     {"--identity-domain DOMAIN", "provide user domain if no map was given"},
-    {"--revisions-file FILENAME", "provide a file with revision number that should be processed"},
+    {"--revisions-file FILENAME",
+     "provide a file with revision number that should be processed"},
     {"--rules FILENAME[,FILENAME]", "the rules file(s) that determines what goes where"},
     {"--msg-filter FILENAME", "External program / script to modify svn log message"},
     {"--add-metadata", "if passed, each git commit will have svn commit info"},
-    {"--add-metadata-notes", "if passed, each git commit will have notes with svn commit info"},
+    {"--add-metadata-notes",
+     "if passed, each git commit will have notes with svn commit info"},
     {"--resume-from revision", "start importing at svn revision number"},
     {"--max-rev revision", "stop importing at svn revision number"},
     {"--dry-run", "don't actually write anything"},
-    {"--create-dump", "don't create the repository but a dump file suitable for piping into fast-import"},
+    {"--create-dump",
+     "don't create the repository but a dump file suitable for piping into fast-import"},
     {"--debug-rules", "print what rule is being used for each file"},
-    {"--commit-interval NUMBER", "if passed the cache will be flushed to git every NUMBER of commits"},
+    {"--commit-interval NUMBER",
+     "if passed the cache will be flushed to git every NUMBER of commits"},
     {"--stats", "after a run print some statistics about the rules"},
-    {"--svn-branches", "Use the contents of SVN when creating branches, Note: SVN tags are branches as well"},
+    {"--svn-branches",
+     "Use the contents of SVN when creating branches, Note: SVN tags are branches as "
+     "well"},
     {"--empty-dirs", "Add .gitignore-file for empty dirs"},
     {"--svn-ignore", "Import svn-ignore-properties via .gitignore"},
     {"--propcheck", "Check for svn-properties except svn-ignore"},
-    {"--fast-import-timeout SECONDS", "number of seconds to wait before terminating fast-import, 0 to wait forever"},
+    {"--fast-import-timeout SECONDS",
+     "number of seconds to wait before terminating fast-import, 0 to wait forever"},
     {"-h, --help", "show help"},
     {"-v, --version", "show version"},
-    CommandLineLastOption
-};
+    CommandLineLastOption};
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
     printf("Invoked as:'");
-    for(int i = 0; i < argc; ++i)
+    for (int i = 0; i < argc; ++i)
         printf(" %s", argv[i]);
     printf("'\n");
     CommandLineParser::init(argc, argv);
     CommandLineParser::addOptionDefinitions(options);
     Stats::init();
-    CommandLineParser *args = CommandLineParser::instance();
-    if(args->contains(QLatin1String("version"))) {
+    CommandLineParser* args = CommandLineParser::instance();
+    if (args->contains(QLatin1String("version"))) {
         printf("Git version: %s\n", VER);
         return 0;
     }
@@ -184,19 +196,22 @@ int main(int argc, char **argv)
         foreach (QString option, args->undefinedOptions()) {
             if (!first)
                 out << "          : ";
-            out << "unrecognized option or missing argument for; `" << option << "'" << Qt::endl;
+            out << "unrecognized option or missing argument for; `" << option << "'"
+                << Qt::endl;
             first = false;
         }
         return 10;
     }
     if (!args->contains("rules")) {
         QTextStream out(stderr);
-        out << "svn-all-fast-export failed: please specify the rules using the 'rules' argument\n";
+        out << "svn-all-fast-export failed: please specify the rules using the 'rules' "
+               "argument\n";
         return 11;
     }
     if (!args->contains("identity-map") && !args->contains("identity-domain")) {
         QTextStream out(stderr);
-        out << "WARNING; no identity-map or -domain specified, all commits will use default @localhost email address\n\n";
+        out << "WARNING; no identity-map or -domain specified, all commits will use "
+               "default @localhost email address\n\n";
     }
 
     QCoreApplication app(argc, argv);
@@ -208,13 +223,13 @@ int main(int argc, char **argv)
     int max_rev = args->optionArgument(QLatin1String("max-rev")).toInt();
 
     // create the repository list
-    QHash<QString, Repository *> repositories;
+    QHash<QString, Repository*> repositories;
 
     int cutoff = resume_from ? resume_from : INT_MAX;
- retry:
+retry:
     int min_rev = 1;
     foreach (Rules::Repository rule, rulesList.allRepositories()) {
-        Repository *repo = createRepository(rule, repositories);
+        Repository* repo = createRepository(rule, repositories);
         if (!repo)
             return EXIT_FAILURE;
         repositories.insert(rule.name, repo);
@@ -224,23 +239,23 @@ int main(int argc, char **argv)
         repo->restoreBranchNotes();
 
         /*
-  * cutoff < resume_from => error exit eventually
-  * repo_next == cutoff => probably truncated log
-  */
+         * cutoff < resume_from => error exit eventually
+         * repo_next == cutoff => probably truncated log
+         */
         if (cutoff < resume_from && repo_next == cutoff)
             /*
-      * Restore the log file so we fail the next time
-      * svn2git is invoked with the same arguments
-      */
+             * Restore the log file so we fail the next time
+             * svn2git is invoked with the same arguments
+             */
             repo->restoreLog();
 
         if (cutoff < min_rev)
             /*
-      * We've rewound before the last revision of some
-      * repository that we've already seen.  Start over
-      * from the beginning.  (since cutoff is decreasing,
-      * we're sure we'll make forward progress eventually)
-      */
+             * We've rewound before the last revision of some
+             * repository that we've already seen.  Start over
+             * from the beginning.  (since cutoff is decreasing,
+             * we're sure we'll make forward progress eventually)
+             */
             goto retry;
 
         if (min_rev < repo_next)
@@ -254,7 +269,8 @@ int main(int argc, char **argv)
     }
 
     if (min_rev < resume_from)
-        qDebug() << "skipping revisions" << min_rev << "to" << resume_from - 1 << "as requested";
+        qDebug() << "skipping revisions" << min_rev << "to" << resume_from - 1
+                 << "as requested";
 
     if (resume_from)
         min_rev = resume_from;
@@ -265,7 +281,8 @@ int main(int argc, char **argv)
     svn.setRepositories(repositories);
     svn.setIdentityMap(loadIdentityMapFile(args->optionArgument("identity-map")));
     // Massage user input a little, no guarantees that input makes sense.
-    QString domain = args->optionArgument("identity-domain").simplified().remove(QChar('@'));
+    QString domain
+        = args->optionArgument("identity-domain").simplified().remove(QChar('@'));
     if (domain.isEmpty())
         domain = QString("localhost");
     svn.setIdentityDomain(domain);
@@ -274,11 +291,12 @@ int main(int argc, char **argv)
         max_rev = svn.youngestRevision();
 
     bool errors = false;
-    QSet<int> revisions = loadRevisionsFile(args->optionArgument(QLatin1String("revisions-file")), svn);
+    QSet<int> revisions
+        = loadRevisionsFile(args->optionArgument(QLatin1String("revisions-file")), svn);
     const bool filerRevisions = !revisions.isEmpty();
     for (int i = min_rev; i <= max_rev; ++i) {
-        if(filerRevisions) {
-            if( !revisions.contains(i) ) {
+        if (filerRevisions) {
+            if (!revisions.contains(i)) {
                 printf(".");
                 continue;
             } else {
@@ -291,7 +309,7 @@ int main(int argc, char **argv)
         }
     }
 
-    foreach (Repository *repo, repositories) {
+    foreach (Repository* repo, repositories) {
         repo->finalizeTags();
         repo->saveBranchNotes();
         delete repo;

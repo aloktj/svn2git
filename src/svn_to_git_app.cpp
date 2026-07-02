@@ -44,6 +44,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <regex>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -245,9 +246,41 @@ bool pushToGitLab(const std::string& gitRepoPath, const std::string& remoteUrl,
     return true;
 }
 
-/// Build the traceability artifacts from an already-converted repository:
-/// every commit with an "svn revision" trailer (git-svn-id or svn2git
-/// metadata) is mapped; commits without one are recorded as findings.
+/// Extract the SVN revision from converter-embedded commit metadata:
+/// git-svn writes a "git-svn-id: <url>@<rev> <uuid>" trailer, and
+/// svn-all-fast-export --add-metadata appends "svn path=…; revision=<rev>".
+/// @return the revision, or -1 when the body carries no metadata
+long extractSvnRevision(const std::string& commitBody)
+{
+    static const std::regex kGitSvnId(R"(git-svn-id:\s*\S+@(\d+)\s)");
+    static const std::regex kSvn2GitMetadata(R"(svn path=[^;]*;\s*revision=(\d+))");
+
+    std::smatch match;
+    if (std::regex_search(commitBody, match, kGitSvnId)
+        || std::regex_search(commitBody, match, kSvn2GitMetadata)) {
+        try {
+            return std::stol(match[1].str());
+        } catch (const std::exception&) {
+            return -1; // overflow — treat as absent
+        }
+    }
+    return -1;
+}
+
+/// One commit parsed from the git log record stream.
+struct CommitRecord {
+    std::string sha;
+    std::string author;
+    std::string timestamp;
+    std::string subject;
+    long svnRevision = -1; ///< real revision from metadata, -1 when absent
+};
+
+/// Build the traceability artifacts from an already-converted repository.
+/// Real SVN revision numbers are taken from per-commit metadata
+/// (git-svn-id / svn2git --add-metadata trailers). Only when NO commit
+/// carries metadata does the tool fall back to sequential numbering —
+/// mixing real and fabricated revisions would corrupt the audit map.
 bool generateTraceability(const std::string& gitRepoPath,
                           const std::string& repositoryName,
                           svn2git::ErrorReporter& reporter)
@@ -255,46 +288,78 @@ bool generateTraceability(const std::string& gitRepoPath,
     auto log = svn2git::logging::get("traceability");
     const std::string base = "git -C " + svn2git::CommandRunner::shellQuote(gitRepoPath);
 
-    // %H|%an|%aI|%s — machine-parsable one-line-per-commit log.
-    const svn2git::CommandResult result
-        = svn2git::CommandRunner::run(base + " log --all --format='%H|%an|%aI|%s'");
+    // Record-separated log (\x1e between commits, \x1f before the body)
+    // so full commit messages — where the metadata trailers live — can be
+    // parsed in a single git invocation.
+    const svn2git::CommandResult result = svn2git::CommandRunner::run(
+        base + " log --all --reverse --format='%x1e%H|%an|%aI%x1f%B'");
     if (!result.ok()) {
         reporter.report(svn2git::ErrorCode::ExternalToolError,
                         "git log failed while building traceability map", gitRepoPath);
         return false;
     }
 
-    svn2git::RevisionMapper mapper(repositoryName);
-
-    // Without converter-embedded revision metadata, the newest commit is
-    // the highest revision; enumerate oldest→newest to assign sequence
-    // numbers deterministically. When a "git-svn-id" trailer exists we
-    // prefer the real revision number.
-    std::vector<std::string> lines;
+    // Parse records (oldest first, thanks to --reverse).
+    std::vector<CommitRecord> commits;
+    long withMetadata = 0;
     {
         std::istringstream stream(result.output);
-        std::string line;
-        while (std::getline(stream, line)) {
-            if (!line.empty() && line.front() == '\'')
-                line.erase(0, 1);
-            if (!line.empty() && line.back() == '\'')
-                line.pop_back();
-            if (!line.empty())
-                lines.push_back(line);
+        std::string record;
+        while (std::getline(stream, record, '\x1e')) {
+            const std::size_t headerEnd = record.find('\x1f');
+            if (headerEnd == std::string::npos)
+                continue; // shell-quoting artifacts around the separators
+
+            CommitRecord commit;
+            std::istringstream header(record.substr(0, headerEnd));
+            std::getline(header, commit.sha, '|');
+            std::getline(header, commit.author, '|');
+            std::getline(header, commit.timestamp);
+            if (commit.sha.size() != 40)
+                continue;
+
+            const std::string body = record.substr(headerEnd + 1);
+            commit.subject = body.substr(0, body.find('\n'));
+            commit.svnRevision = extractSvnRevision(body);
+            if (commit.svnRevision > 0)
+                ++withMetadata;
+            commits.push_back(std::move(commit));
         }
     }
 
-    long sequence = static_cast<long>(lines.size());
-    for (const std::string& line : lines) {
-        std::istringstream fields(line);
-        std::string sha, author, timestamp, subject;
-        std::getline(fields, sha, '|');
-        std::getline(fields, author, '|');
-        std::getline(fields, timestamp, '|');
-        std::getline(fields, subject);
-        if (sha.size() == 40)
-            mapper.recordMapping(sequence, sha, author, timestamp, subject);
-        --sequence;
+    if (commits.empty()) {
+        reporter.report(svn2git::ErrorCode::ExternalToolError,
+                        "no commits found while building traceability map", gitRepoPath);
+        return false;
+    }
+
+    svn2git::RevisionMapper mapper(repositoryName);
+    const bool useMetadata = withMetadata == static_cast<long>(commits.size());
+    if (useMetadata) {
+        log->info("using embedded SVN revision metadata for all {} commit(s)",
+                  commits.size());
+        for (const CommitRecord& commit : commits)
+            mapper.recordMapping(commit.svnRevision, commit.sha, commit.author,
+                                 commit.timestamp, commit.subject);
+    } else {
+        // Partial metadata cannot be mixed with fabricated numbers; be
+        // explicit that the fallback numbering is positional only.
+        if (withMetadata > 0)
+            reporter.report(
+                svn2git::ErrorCode::StructuralRevisionError,
+                std::to_string(commits.size() - withMetadata) + " of "
+                    + std::to_string(commits.size())
+                    + " commit(s) lack SVN revision metadata — falling back to "
+                      "sequential numbering; re-convert with --add-metadata for "
+                      "authoritative traceability",
+                gitRepoPath);
+        else
+            log->warn("no SVN revision metadata found — using sequential "
+                      "numbering (positions, not real revisions)");
+        long sequence = 0;
+        for (const CommitRecord& commit : commits)
+            mapper.recordMapping(++sequence, commit.sha, commit.author, commit.timestamp,
+                                 commit.subject);
     }
 
     const bool jsonOk = mapper.generateMappingFile("svn_to_git_mapping.json");

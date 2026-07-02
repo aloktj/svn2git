@@ -4,6 +4,8 @@
 
 #include "svn2git/revision_mapper.h"
 
+#include "unit_helpers.h"
+
 #include <catch2/catch_test_macros.hpp>
 #include <nlohmann/json.hpp>
 #include <sqlite3.h>
@@ -147,7 +149,7 @@ TEST_CASE("empty mapper fails 1:1 validation", "[revision-mapper]")
 
 TEST_CASE("JSON export matches the documented schema", "[revision-mapper]")
 {
-    FileGuard guard {"test_mapping.json"};
+    FileGuard guard {testhelpers::uniqueTempPath("svn2git-mapping", ".json")};
 
     RevisionMapper mapper("freertos24");
     mapper.recordMapping(12345, fakeSha(0xf00d), "John Smith", "2024-01-15T10:30:00Z",
@@ -182,7 +184,7 @@ TEST_CASE("JSON export fails cleanly on unwritable path", "[revision-mapper]")
 
 TEST_CASE("SQLite export creates a queryable traceability database", "[revision-mapper]")
 {
-    FileGuard guard {"test_traceability.db"};
+    FileGuard guard {testhelpers::uniqueTempPath("svn2git-trace", ".db")};
 
     RevisionMapper mapper("testrepo");
     for (int revision = 1; revision <= 5; ++revision)

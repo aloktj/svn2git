@@ -55,8 +55,18 @@ CommandResult CommandRunner::run(const std::string& command)
         // Scope ensures we read everything before extracting the status.
         std::unique_ptr<FILE, PipeCloser> pipe(raw);
         size_t n = 0;
-        while ((n = std::fread(buffer.data(), 1, buffer.size(), pipe.get())) > 0)
+        while ((n = std::fread(buffer.data(), 1, buffer.size(), pipe.get())) > 0) {
+            if (result.truncated)
+                continue; // keep draining so the child can exit normally
+            if (result.output.size() + n > kMaxCaptureBytes) {
+                result.truncated = true;
+                log->error("output of '{}' exceeds the {} MiB capture limit — "
+                           "result marked truncated and treated as failure",
+                           command, kMaxCaptureBytes / (1024 * 1024));
+                continue;
+            }
             result.output.append(buffer.data(), n);
+        }
 
         // pclose (via deleter) returns the wait status; we need it, so
         // release and close manually instead.

@@ -140,10 +140,19 @@ ConfigCheck ConfigValidator::validateYamlFile()
             check.findings.push_back(locus + ": expected 'key: value' or '- item', got '"
                                      + content.substr(0, 40) + "'");
 
-        const auto quoteCount = [&content](char q) {
-            return std::count(content.begin(), content.end(), q);
-        };
-        if (quoteCount('"') % 2 != 0)
+        // Count only unescaped double quotes so valid YAML like
+        // key: "a\"b" is not flagged (backslash-escape per YAML
+        // double-quoted scalar rules).
+        long unescapedQuotes = 0;
+        for (std::size_t i = 0; i < content.size(); ++i) {
+            if (content[i] == '\\') {
+                ++i; // skip the escaped character
+                continue;
+            }
+            if (content[i] == '"')
+                ++unescapedQuotes;
+        }
+        if (unescapedQuotes % 2 != 0)
             check.findings.push_back(locus + ": unbalanced double quote");
     }
 

@@ -193,18 +193,19 @@ GitValidationStatus GitValidator::validateAgainstExpected(const SVNReport& expec
                                            + "' has no counterpart in Git");
     }
 
-    // Commit count plausibility: a converted repository can never hold
-    // more history than SVN revisions, and an empty result is always
-    // wrong when the source had revisions.
+    // Commit count plausibility: an empty result is always wrong when the
+    // source had revisions. More Git commits than SVN revisions is NOT a
+    // defect — one SVN revision touching several branches legitimately
+    // produces one Git commit per branch (see src/repository.cpp) — so
+    // that case is only logged for the migration dossier.
     if (expected.totalRevisions > 0 && actual.totalCommits == 0)
         status.discrepancies.push_back(
             "converted repository has no commits while SVN had "
             + std::to_string(expected.totalRevisions) + " revision(s)");
     if (actual.totalCommits > expected.totalRevisions)
-        status.discrepancies.push_back("converted repository has more commits ("
-                                       + std::to_string(actual.totalCommits)
-                                       + ") than SVN revisions ("
-                                       + std::to_string(expected.totalRevisions) + ")");
+        log->info("converted repository has more commits ({}) than SVN revisions ({}) — "
+                  "expected when revisions touch multiple branches",
+                  actual.totalCommits, expected.totalRevisions);
 
     if (actual.authorCount > expected.authorCount)
         status.discrepancies.push_back(

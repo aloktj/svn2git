@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
 #include <fstream>
 #include <istream>
 #include <ostream>
@@ -77,15 +78,27 @@ bool RulesValidator::validateRegex(const std::string& pattern)
 
 bool RulesValidator::parse(RulesValidationResult& result)
 {
-    auto log = logging::get("rules-validator");
     m_matchRules.clear();
     m_repositories.clear();
+    std::vector<std::string> visited;
+    return parseFile(m_rulesFilePath, result, 0, visited);
+}
 
-    std::ifstream file(m_rulesFilePath);
+bool RulesValidator::parseFile(const std::string& filePath, RulesValidationResult& result,
+                               int depth, std::vector<std::string>& visited)
+{
+    // Guard against runaway include chains (cycles are caught separately,
+    // this bounds pathological but acyclic nesting).
+    constexpr int kMaxIncludeDepth = 16;
+
+    auto log = logging::get("rules-validator");
+    visited.push_back(filePath);
+
+    std::ifstream file(filePath);
     if (!file.is_open()) {
-        const std::string msg = "cannot open rules file '" + m_rulesFilePath + "'";
+        const std::string msg = "cannot open rules file '" + filePath + "'";
         result.errors.push_back(msg);
-        m_reporter.report(ErrorCode::FileAccessError, msg, m_rulesFilePath);
+        m_reporter.report(ErrorCode::FileAccessError, msg, filePath);
         return false;
     }
 
@@ -109,7 +122,7 @@ bool RulesValidator::parse(RulesValidationResult& result)
         if (line.empty())
             continue;
 
-        const std::string locus = m_rulesFilePath + ":" + std::to_string(lineNumber);
+        const std::string locus = filePath + ":" + std::to_string(lineNumber);
         auto [keyword, rest] = splitKeyword(line);
 
         if (block == Block::None) {
@@ -132,14 +145,31 @@ bool RulesValidator::parse(RulesValidationResult& result)
                 currentMatch.lineNumber = lineNumber;
                 block = Block::Match;
             } else if (keyword == "include") {
-                // Included files are validated when the converter resolves
-                // them; here we only check the reference is present.
-                if (rest.empty())
+                // Follow includes recursively, resolving relative paths
+                // against the including file — mirroring the converter's
+                // parser so validation sees the complete effective rule set.
+                if (rest.empty()) {
                     result.errors.push_back(locus + ": 'include' requires a file name");
-                else
-                    result.warnings.push_back(
-                        locus + ": include '" + rest
-                        + "' not followed (validate it separately)");
+                    continue;
+                }
+                std::filesystem::path includePath(rest);
+                if (includePath.is_relative())
+                    includePath
+                        = std::filesystem::path(filePath).parent_path() / includePath;
+                const std::string resolved = includePath.lexically_normal().string();
+                if (depth + 1 >= kMaxIncludeDepth) {
+                    result.errors.push_back(locus + ": include nesting deeper than "
+                                            + std::to_string(kMaxIncludeDepth)
+                                            + " levels");
+                    continue;
+                }
+                if (std::find(visited.begin(), visited.end(), resolved)
+                    != visited.end()) {
+                    result.errors.push_back(locus + ": circular include of '" + resolved
+                                            + "'");
+                    continue;
+                }
+                parseFile(resolved, result, depth + 1, visited);
             } else if (keyword == "declare") {
                 // 'declare VAR=value' — variable substitution handled by
                 // the converter; nothing to statically validate here.
@@ -193,15 +223,14 @@ bool RulesValidator::parse(RulesValidationResult& result)
     }
 
     if (block != Block::None)
-        result.errors.push_back(m_rulesFilePath + ": unterminated "
+        result.errors.push_back(filePath + ": unterminated "
                                 + (block == Block::Match
                                        ? std::string("'match'")
                                        : std::string("'create repository'"))
                                 + " block at end of file");
 
-    log->debug("parsed '{}': {} repositories, {} match rules, {} error(s)",
-               m_rulesFilePath, m_repositories.size(), m_matchRules.size(),
-               result.errors.size());
+    log->debug("parsed '{}': {} repositories, {} match rules, {} error(s)", filePath,
+               m_repositories.size(), m_matchRules.size(), result.errors.size());
     return true;
 }
 
@@ -342,10 +371,12 @@ void RulesValidator::interactiveDebug(std::istream& in, std::ostream& out)
     auto log = logging::get("rules-validator");
     RulesValidationResult result;
     if (!parse(result) || !result.errors.empty()) {
+        // Debugging against a broken rule set would produce misleading
+        // match results — refuse until the file parses cleanly.
         out << "rules file has errors — fix them before debugging:\n";
         for (const std::string& error : result.errors)
             out << "  " << error << '\n';
-        // Also run analyze-level reporting so the user sees regex issues.
+        return;
     }
 
     out << "svn2git rule debugger — enter SVN paths (empty line or EOF quits)\n";

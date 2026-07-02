@@ -99,7 +99,7 @@ TEST_CASE("missing branch and tag are reported as discrepancies",
     CHECK(reporter.hasErrors());
 }
 
-TEST_CASE("more Git commits than SVN revisions is a discrepancy",
+TEST_CASE("more Git commits than SVN revisions is tolerated",
           "[integration][git-validator]")
 {
     REQUIRE_TOOLS("git");
@@ -108,6 +108,9 @@ TEST_CASE("more Git commits than SVN revisions is a discrepancy",
     const std::string repo = dir.path + "/git-repo";
     testhelpers::createTestGitRepo(repo, 6);
 
+    // One SVN revision touching several branches legitimately produces
+    // one Git commit per branch, so a higher Git commit count must NOT
+    // fail validation (it is logged, not reported as a discrepancy).
     SVNReport expected;
     expected.ok = true;
     expected.totalRevisions = 3; // fewer than the 6 commits in the repo
@@ -117,9 +120,32 @@ TEST_CASE("more Git commits than SVN revisions is a discrepancy",
     GitValidator validator(repo, reporter);
     const GitValidationStatus status = validator.validateAgainstExpected(expected);
 
+    CHECK(status.passed);
+    CHECK(status.discrepancies.empty());
+}
+
+TEST_CASE("empty converted repository is a discrepancy", "[integration][git-validator]")
+{
+    REQUIRE_TOOLS("git");
+
+    TempDir dir;
+    const std::string repo = dir.path + "/git-repo";
+    // Repository with refs but no commits: init only.
+    svn2git::CommandRunner::run("mkdir -p " + svn2git::CommandRunner::shellQuote(repo));
+    testhelpers::gitIn(repo, "init --quiet --initial-branch=main");
+
+    SVNReport expected;
+    expected.ok = true;
+    expected.totalRevisions = 6;
+    expected.authorCount = 1;
+
+    ErrorReporter reporter;
+    GitValidator validator(repo, reporter);
+    const GitValidationStatus status = validator.validateAgainstExpected(expected);
+
     CHECK_FALSE(status.passed);
     REQUIRE_FALSE(status.discrepancies.empty());
-    CHECK(status.discrepancies.front().find("more commits") != std::string::npos);
+    CHECK(status.discrepancies.front().find("no commits") != std::string::npos);
 }
 
 TEST_CASE("healthy repository passes the integrity check", "[integration][git-validator]")

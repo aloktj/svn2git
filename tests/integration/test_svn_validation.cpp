@@ -91,9 +91,15 @@ TEST_CASE("repository size and largest files are computed",
 
     const SVNReport report = validator.generatePreMigrationReport();
     REQUIRE_FALSE(report.largestFiles.empty());
-    // All fixture files live under trunk/branches/tags.
-    for (const svn2git::SvnFileInfo& info : report.largestFiles)
-        CHECK(info.sizeBytes >= 0);
+    // All fixture files live under trunk/branches/tags — this guards the
+    // path-column parsing (a truncated path would lose the prefix).
+    for (const svn2git::SvnFileInfo& info : report.largestFiles) {
+        const bool underLayout = info.path.rfind("trunk/", 0) == 0
+            || info.path.rfind("branches/", 0) == 0 || info.path.rfind("tags/", 0) == 0;
+        INFO("path: " << info.path);
+        CHECK(underLayout);
+        CHECK(info.sizeBytes > 0);
+    }
 }
 
 TEST_CASE("unreachable repository produces a clean failure",

@@ -24,9 +24,12 @@ namespace svn2git {
 struct CommandResult {
     int exitCode = -1; ///< process exit code; -1 when spawn failed
     std::string output; ///< captured stdout (stderr redirected into it)
+    bool truncated = false; ///< output exceeded the capture limit
 
-    /// True when the process was spawned and exited with status 0.
-    bool ok() const { return exitCode == 0; }
+    /// True when the process was spawned, exited with status 0, and its
+    /// output fit within the capture limit (a truncated capture cannot be
+    /// parsed safely, so it is never treated as success).
+    bool ok() const { return exitCode == 0 && !truncated; }
 };
 
 /// Callable used by validators to execute a shell command.
@@ -36,11 +39,19 @@ using Runner = std::function<CommandResult(const std::string& command)>;
 /// Executes shell commands, capturing combined stdout+stderr.
 class CommandRunner {
 public:
+    /// Upper bound on captured output (512 MiB). Bounds process memory on
+    /// pathological inputs (e.g. full-history `svn log` of a huge repo);
+    /// when exceeded the result is marked truncated and treated as failure.
+    static constexpr std::size_t kMaxCaptureBytes
+        = static_cast<std::size_t>(512) * 1024 * 1024;
+
     /// Run @p command through /bin/sh, capturing combined output.
     ///
     /// Never throws. A failure to spawn is reported as exitCode == -1
     /// with a diagnostic in @c output, so callers always have an explicit
-    /// error path to handle (no silent failures).
+    /// error path to handle (no silent failures). Output larger than
+    /// kMaxCaptureBytes sets @c truncated (remaining output is drained
+    /// but discarded so the child terminates normally).
     static CommandResult run(const std::string& command);
 
     /// Quote a string for safe interpolation into a shell command line.

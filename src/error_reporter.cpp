@@ -164,8 +164,7 @@ bool ErrorReporter::generateReport(const std::string& filename) const
         return false;
     }
 
-    log->info("error report with {} entrie(s) written to '{}'", m_entries.size(),
-              filename);
+    log->info("error report with {} entries written to '{}'", m_entries.size(), filename);
     return true;
 }
 

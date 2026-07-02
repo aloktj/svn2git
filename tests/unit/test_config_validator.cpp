@@ -4,6 +4,8 @@
 
 #include "svn2git/config_validator.h"
 
+#include "unit_helpers.h"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdio>
@@ -17,10 +19,12 @@ using svn2git::ErrorReporter;
 
 namespace {
 
+/// Temporary config file with a unique per-test path (safe under
+/// parallel test execution), deleted on scope exit.
 struct TempFile {
     std::string path;
-    TempFile(std::string name, const std::string& content)
-        : path(std::move(name))
+    TempFile(const std::string& stem, const std::string& content)
+        : path(testhelpers::uniqueTempPath(stem, ""))
     {
         std::ofstream file(path, std::ios::trunc);
         file << content;
@@ -108,6 +112,17 @@ TEST_CASE("well-formed YAML passes the light check", "[config-validator]")
                   "  steps:\n"
                   "    - validate\n"
                   "    - convert\n");
+    ErrorReporter reporter;
+    ConfigValidator validator("", "", yaml.path, reporter);
+
+    CHECK(validator.validateYamlFile().passed);
+}
+
+TEST_CASE("escaped quotes in YAML are not flagged as unbalanced", "[config-validator]")
+{
+    TempFile yaml("cfg_orch_escaped.yml",
+                  "command: \"echo \\\"hello\\\"\"\n"
+                  "other: \"a\\\"b\"\n");
     ErrorReporter reporter;
     ConfigValidator validator("", "", yaml.path, reporter);
 

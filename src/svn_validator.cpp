@@ -121,10 +121,21 @@ std::map<std::string, long> SVNValidator::countCommitsByBranch()
     auto log = logging::get("svn-validator");
     std::map<std::string, long> counts;
 
-    // trunk is treated as a branch for accounting purposes.
-    const long trunkCommits = countCommitsOnPath("trunk");
-    if (trunkCommits >= 0)
-        counts["trunk"] = trunkCommits;
+    // trunk is treated as a branch for accounting purposes — but only
+    // probed when it exists, so repositories with a non-standard layout
+    // don't accumulate spurious external-tool errors (a missing layout
+    // directory is a repository property, not a tool failure).
+    const std::vector<std::string> rootEntries = listChildren("");
+    const bool hasTrunk
+        = std::find(rootEntries.begin(), rootEntries.end(), "trunk") != rootEntries.end();
+    if (hasTrunk) {
+        const long trunkCommits = countCommitsOnPath("trunk");
+        if (trunkCommits >= 0)
+            counts["trunk"] = trunkCommits;
+    } else {
+        log->info("repository has no /trunk directory — skipping trunk accounting "
+                  "(non-standard layout)");
+    }
 
     for (const std::string& branch : listChildren("branches")) {
         const long commits = countCommitsOnPath("branches/" + branch);
@@ -175,10 +186,12 @@ double SVNValidator::calculateRepositorySize()
         if (line.empty() || line.back() == '/')
             continue; // directory entry
 
-        // Tokenize: rev, author, size, then date tokens, path last.
+        // Columns: rev, author, size, then a 3-token date ("Jan 01 12:00"
+        // or "Jan 01 2024"), then the path — which may itself contain
+        // spaces, so it is everything after the six leading columns.
         std::istringstream fields(line);
-        std::string revision, author, sizeText;
-        if (!(fields >> revision >> author >> sizeText))
+        std::string revision, author, sizeText, dateA, dateB, dateC;
+        if (!(fields >> revision >> author >> sizeText >> dateA >> dateB >> dateC))
             continue;
         if (!std::all_of(sizeText.begin(), sizeText.end(),
                          [](unsigned char c) { return std::isdigit(c) != 0; }))
@@ -192,11 +205,11 @@ double SVNValidator::calculateRepositorySize()
         }
         totalBytes += sizeBytes;
 
-        // Path = last whitespace-separated token of the line. SVN paths
-        // with spaces are rare; this heuristic keeps parsing dependency-free.
-        const std::size_t lastSpace = line.find_last_of(" \t");
-        const std::string path
-            = (lastSpace == std::string::npos) ? line : line.substr(lastSpace + 1);
+        std::string path;
+        std::getline(fields, path);
+        path = trim(path);
+        if (path.empty())
+            continue; // malformed listing line — nothing to record
 
         m_largestFiles.push_back(SvnFileInfo {path, sizeBytes});
         std::sort(m_largestFiles.begin(), m_largestFiles.end(),

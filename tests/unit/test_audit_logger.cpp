@@ -4,6 +4,8 @@
 
 #include "svn2git/audit_logger.h"
 
+#include "unit_helpers.h"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdio>
@@ -83,7 +85,7 @@ TEST_CASE("milestones embed commit count and duration", "[audit-logger]")
 
 TEST_CASE("audit trail renders header, events and outcome", "[audit-logger]")
 {
-    FileGuard guard {"test_audit.log"};
+    FileGuard guard {testhelpers::uniqueTempPath("svn2git-audit", ".log")};
 
     AuditLogger audit("freertos24", "john.smith@example.com", "prod-02");
     audit.logEvent("Validation", "SVN repo integrity", "OK");
@@ -106,7 +108,7 @@ TEST_CASE("audit trail renders header, events and outcome", "[audit-logger]")
 
 TEST_CASE("missing outcome is flagged in the audit trail", "[audit-logger]")
 {
-    FileGuard guard {"test_audit_noend.log"};
+    FileGuard guard {testhelpers::uniqueTempPath("svn2git-audit-noend", ".log")};
 
     AuditLogger audit("repo", "op", "host");
     audit.logEvent("Validation", "step", "OK");
@@ -117,7 +119,7 @@ TEST_CASE("missing outcome is flagged in the audit trail", "[audit-logger]")
 
 TEST_CASE("failure outcome is rendered as FAILURE", "[audit-logger]")
 {
-    FileGuard guard {"test_audit_fail.log"};
+    FileGuard guard {testhelpers::uniqueTempPath("svn2git-audit-fail", ".log")};
 
     AuditLogger audit("repo", "op", "host");
     audit.setOutcome(false, "3 errors");
@@ -145,7 +147,7 @@ TEST_CASE("signing rejects an empty key id", "[audit-logger]")
 
 TEST_CASE("signing invokes gpg through the runner", "[audit-logger]")
 {
-    FileGuard guard {"test_audit_sign.log"};
+    FileGuard guard {testhelpers::uniqueTempPath("svn2git-audit-sign", ".log")};
 
     std::string capturedCommand;
     auto fakeRunner = [&capturedCommand](const std::string& command) {
@@ -166,7 +168,7 @@ TEST_CASE("signing invokes gpg through the runner", "[audit-logger]")
 
 TEST_CASE("gpg failure propagates as false", "[audit-logger]")
 {
-    FileGuard guard {"test_audit_sign_fail.log"};
+    FileGuard guard {testhelpers::uniqueTempPath("svn2git-audit-signf", ".log")};
 
     auto failingRunner = [](const std::string&) {
         return CommandResult {2, "gpg: signing failed: No secret key"};

@@ -91,9 +91,17 @@ public:
     const std::vector<RepositoryRule>& repositories() const { return m_repositories; }
 
 private:
-    /// Load and tokenize the rules file. Populates m_matchRules /
+    /// Load and tokenize the rules file, following `include` directives
+    /// recursively (like the converter's parser). Populates m_matchRules /
     /// m_repositories and appends findings to @p result.
     bool parse(RulesValidationResult& result);
+
+    /// Parse one file; called by parse() and recursively for includes.
+    /// @param filePath  file to read (include paths resolve relative to it)
+    /// @param depth     current include nesting depth (cycle/depth guard)
+    /// @param visited   files already being parsed on this include chain
+    bool parseFile(const std::string& filePath, RulesValidationResult& result, int depth,
+                   std::vector<std::string>& visited);
 
     /// Cross-rule semantic checks (needs parse() to have succeeded).
     void analyze(RulesValidationResult& result) const;

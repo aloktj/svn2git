@@ -175,6 +175,10 @@ bool RevisionMapper::generateMappingDatabase(const std::string& dbPath) const
     // Recreate from scratch so repeated runs stay deterministic.
     std::remove(dbPath.c_str());
 
+    // The function proceeds in four stages, failing fast on any SQLite
+    // error: (1) open the database, (2) create the schema, (3) insert
+    // metadata + mappings inside one transaction, (4) commit.
+
     sqlite3* raw = nullptr;
     if (sqlite3_open(dbPath.c_str(), &raw) != SQLITE_OK) {
         const std::string error
@@ -196,6 +200,9 @@ bool RevisionMapper::generateMappingDatabase(const std::string& dbPath) const
         return true;
     };
 
+    // Stage 2 — schema: a metadata key/value table for provenance and a
+    // mappings table keyed by SVN revision with a unique SHA constraint
+    // (enforces 1:1 at the storage layer too), plus a SHA lookup index.
     if (!exec("CREATE TABLE metadata ("
               "  key TEXT PRIMARY KEY,"
               "  value TEXT NOT NULL)")
@@ -209,7 +216,8 @@ bool RevisionMapper::generateMappingDatabase(const std::string& dbPath) const
         || !exec("BEGIN TRANSACTION"))
         return false;
 
-    // Metadata rows document provenance for auditors.
+    // Stage 3a — metadata rows document provenance for auditors
+    // (repository name, creation time, mapping count).
     {
         StmtHandle stmt;
         sqlite3_stmt* rawStmt = nullptr;
@@ -238,6 +246,9 @@ bool RevisionMapper::generateMappingDatabase(const std::string& dbPath) const
         }
     }
 
+    // Stage 3b — bulk-insert the mappings through one prepared statement,
+    // reset and re-bound per row; the surrounding transaction makes this a
+    // single atomic write.
     {
         StmtHandle stmt;
         sqlite3_stmt* rawStmt = nullptr;
@@ -271,6 +282,8 @@ bool RevisionMapper::generateMappingDatabase(const std::string& dbPath) const
         }
     }
 
+    // Stage 4 — commit; failure here leaves no partially written database
+    // visible because the whole insert ran inside the transaction.
     if (!exec("COMMIT"))
         return false;
 

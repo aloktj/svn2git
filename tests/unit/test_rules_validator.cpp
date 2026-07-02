@@ -4,9 +4,12 @@
 
 #include "svn2git/rules_validator.h"
 
+#include "unit_helpers.h"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -17,12 +20,12 @@ using svn2git::RulesValidator;
 
 namespace {
 
-/// Temporary rules file, deleted on scope exit.
+/// Temporary rules file with a unique per-test path (safe under
+/// parallel test execution), deleted on scope exit.
 struct TempRulesFile {
     std::string path;
-    explicit TempRulesFile(const std::string& content,
-                           std::string name = "test_rules_tmp.rules")
-        : path(std::move(name))
+    explicit TempRulesFile(const std::string& content)
+        : path(testhelpers::uniqueTempPath("svn2git-rules", ".rules"))
     {
         std::ofstream file(path, std::ios::trunc);
         file << content;
@@ -255,6 +258,76 @@ TEST_CASE("dry run routes ignore rules to IGNORED", "[rules-validator]")
     const RulesValidationResult result = validator.dryRun({"/vendor/lib/"});
     REQUIRE(result.dryRunLines.size() == 1);
     CHECK(result.dryRunLines[0].find("IGNORED") != std::string::npos);
+}
+
+TEST_CASE("include directives are followed recursively", "[rules-validator]")
+{
+    // The included file declares the repository; the including file only
+    // has the match rules — validation must see the merged rule set.
+    TempRulesFile included("create repository incproject\nend repository\n");
+    const std::string includedName
+        = std::filesystem::path(included.path).filename().string();
+    TempRulesFile main("include " + includedName
+                       + "\n"
+                         "match /trunk/\n  repository incproject\n  branch main\n"
+                         "end match\n");
+
+    ErrorReporter reporter;
+    RulesValidator validator(main.path, reporter);
+    const RulesValidationResult result = validator.validate();
+
+    CHECK(result.valid);
+    CHECK(result.repositoryCount == 1);
+    CHECK(result.ruleCount == 1);
+}
+
+TEST_CASE("missing include target is an error", "[rules-validator]")
+{
+    TempRulesFile main("include does-not-exist.rules\n"
+                       "create repository p\nend repository\n"
+                       "match /trunk/\n  repository p\nend match\n");
+    ErrorReporter reporter;
+    RulesValidator validator(main.path, reporter);
+
+    CHECK_FALSE(validator.validate().valid);
+}
+
+TEST_CASE("circular includes are detected", "[rules-validator]")
+{
+    // A file that includes itself must error out instead of recursing.
+    TempRulesFile main("");
+    {
+        std::ofstream file(main.path, std::ios::trunc);
+        file << "include " << std::filesystem::path(main.path).filename().string()
+             << "\n";
+    }
+    ErrorReporter reporter;
+    RulesValidator validator(main.path, reporter);
+
+    const RulesValidationResult result = validator.validate();
+    CHECK_FALSE(result.valid);
+    bool foundCycleError = false;
+    for (const std::string& error : result.errors)
+        if (error.find("circular include") != std::string::npos)
+            foundCycleError = true;
+    CHECK(foundCycleError);
+}
+
+TEST_CASE("interactive debugger refuses a broken rules file", "[rules-validator]")
+{
+    TempRulesFile rules("match /trunk/\n"); // unterminated block
+    ErrorReporter reporter;
+    RulesValidator validator(rules.path, reporter);
+
+    std::istringstream in("/trunk/file.c/\n");
+    std::ostringstream out;
+    validator.interactiveDebug(in, out);
+
+    const std::string text = out.str();
+    CHECK(text.find("fix them before debugging") != std::string::npos);
+    // The debugger must not enter the query loop on a broken rule set.
+    CHECK(text.find("matched rule") == std::string::npos);
+    CHECK(text.find("bye") == std::string::npos);
 }
 
 TEST_CASE("interactive debugger resolves paths and terminates on empty line",
