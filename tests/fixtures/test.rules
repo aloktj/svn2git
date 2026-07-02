@@ -1,0 +1,25 @@
+#
+# Sample rules file for svn2git tests — standard trunk/branches/tags layout
+#
+
+create repository testproject
+end repository
+
+match /trunk/
+  repository testproject
+  branch main
+end match
+
+match /branches/([^/]+)/
+  repository testproject
+  branch \1
+end match
+
+match /tags/([^/]+)/
+  repository testproject
+  branch refs/tags/\1
+end match
+
+# Drop everything else explicitly (vendor drops, scratch areas)
+match /
+end match

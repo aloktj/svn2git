@@ -15,57 +15,55 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <QTextStream>
-#include <QList>
-#include <QFile>
 #include <QDebug>
+#include <QFile>
+#include <QList>
+#include <QTextStream>
 
-#include "ruleparser.h"
 #include "CommandLineParser.h"
+#include "ruleparser.h"
 
-RulesList::RulesList(const QString &filenames)
-  : m_filenames(filenames)
+RulesList::RulesList(const QString& filenames)
+    : m_filenames(filenames)
 {
 }
 
-RulesList::~RulesList() {}
+RulesList::~RulesList() { }
 
 void RulesList::load()
 {
-    foreach(const QString filename, m_filenames.split(',') ) {
+    foreach (const QString filename, m_filenames.split(',')) {
         qDebug() << "Loading rules from:" << filename;
-        Rules *rules = new Rules(filename);
+        Rules* rules = new Rules(filename);
         m_rules.append(rules);
         rules->load();
         m_allrepositories.append(rules->repositories());
         QList<Rules::Match> matchRules = rules->matchRules();
-        m_allMatchRules.append( QList<Rules::Match>(matchRules));
+        m_allMatchRules.append(QList<Rules::Match>(matchRules));
     }
 }
 
 const QList<Rules::Repository> RulesList::allRepositories() const
 {
-  return m_allrepositories;
+    return m_allrepositories;
 }
 
-const QList<QList<Rules::Match> > RulesList::allMatchRules() const
+const QList<QList<Rules::Match>> RulesList::allMatchRules() const
 {
-  return m_allMatchRules;
+    return m_allMatchRules;
 }
 
 const QList<Rules*> RulesList::rules() const
 {
-  return m_rules;
+    return m_rules;
 }
 
-Rules::Rules(const QString &fn)
+Rules::Rules(const QString& fn)
     : filename(fn)
 {
 }
 
-Rules::~Rules()
-{
-}
+Rules::~Rules() { }
 
 const QList<Rules::Repository> Rules::repositories() const
 {
@@ -77,7 +75,7 @@ const QList<Rules::Match> Rules::matchRules() const
     return m_matchRules;
 }
 
-Rules::Match::Substitution Rules::parseSubstitution(const QString &string)
+Rules::Match::Substitution Rules::parseSubstitution(const QString& string)
 {
     if (string.at(0) != 's' || string.length() < 5)
         return Match::Substitution();
@@ -124,7 +122,7 @@ void Rules::load()
     load(filename);
 }
 
-void Rules::load(const QString &filename)
+void Rules::load(const QString& filename)
 {
     qDebug() << "Loading rules from" << filename;
     // initialize the regexps we will use
@@ -142,8 +140,9 @@ void Rules::load(const QString &filename)
     QRegExp matchRevLine("(min|max) revision (\\d+)", Qt::CaseInsensitive);
     QRegExp matchAnnotateLine("annotated\\s+(\\S+)", Qt::CaseInsensitive);
     QRegExp matchPrefixLine("prefix\\s+(.*)$", Qt::CaseInsensitive);
-    QRegExp declareLine("declare\\s+("+varRegex+")\\s*=\\s*(\\S+)", Qt::CaseInsensitive);
-    QRegExp variableLine("\\$\\{("+varRegex+")(\\|[^}$]*)?\\}", Qt::CaseInsensitive);
+    QRegExp declareLine("declare\\s+(" + varRegex + ")\\s*=\\s*(\\S+)",
+                        Qt::CaseInsensitive);
+    QRegExp variableLine("\\$\\{(" + varRegex + ")(\\|[^}$]*)?\\}", Qt::CaseInsensitive);
     QRegExp includeLine("include\\s+(.*)", Qt::CaseInsensitive);
 
     enum { ReadingNone, ReadingRepository, ReadingMatch } state = ReadingNone;
@@ -159,7 +158,7 @@ void Rules::load(const QString &filename)
     QStringList lines = s.readAll().split('\n', Qt::KeepEmptyParts);
 
     QStringList::iterator it;
-    for(it = lines.begin(); it != lines.end(); ++it) {
+    for (it = lines.begin(); it != lines.end(); ++it) {
         ++lineNumber;
         QString origLine = *it;
         QString line = origLine;
@@ -174,10 +173,10 @@ void Rules::load(const QString &filename)
         bool isIncludeRule = includeLine.exactMatch(line);
         if (isIncludeRule) {
             int index = filename.lastIndexOf("/");
-            QString includeFile = filename.left( index + 1) + includeLine.cap(1);
+            QString includeFile = filename.left(index + 1) + includeLine.cap(1);
             load(includeFile);
         } else {
-            while( variableLine.indexIn(line) != -1 ) {
+            while (variableLine.indexIn(line) != -1) {
                 QString replacement;
                 if (m_variables.contains(variableLine.cap(1))) {
                     replacement = m_variables[variableLine.cap(1)];
@@ -185,7 +184,8 @@ void Rules::load(const QString &filename)
                     if (variableLine.cap(2).startsWith('|')) {
                         replacement = variableLine.cap(2).mid(1);
                     } else {
-                        qFatal("Undeclared variable: %s", qPrintable(variableLine.cap(1)));
+                        qFatal("Undeclared variable: %s",
+                               qPrintable(variableLine.cap(1)));
                     }
                 }
                 line = line.replace(variableLine.cap(0), replacement);
@@ -207,16 +207,18 @@ void Rules::load(const QString &filename)
                     repo.prefix = matchPrefixLine.cap(1);
                     continue;
                 } else if (line == "end repository") {
-                    if (!repo.forwardTo.isEmpty()
-                        && !repo.description.isEmpty()) {
+                    if (!repo.forwardTo.isEmpty() && !repo.description.isEmpty()) {
 
-                        qFatal("Specifing repository and description on repository is invalid on line %d", lineNumber);
+                        qFatal("Specifing repository and description on repository is "
+                               "invalid on line %d",
+                               lineNumber);
                     }
 
-                    if (!repo.forwardTo.isEmpty()
-                        && !repo.branches.isEmpty()) {
+                    if (!repo.forwardTo.isEmpty() && !repo.branches.isEmpty()) {
 
-                        qFatal("Specifing repository and branches on repository is invalid on line %d", lineNumber);
+                        qFatal("Specifing repository and branches on repository is "
+                               "invalid on line %d",
+                               lineNumber);
                     }
 
                     m_repositories += repo;
@@ -236,30 +238,32 @@ void Rules::load(const QString &filename)
                     match.branch = matchBranchLine.cap(1);
                     continue;
                 } else if (matchRepoSubstLine.exactMatch(line)) {
-                    Match::Substitution subst = parseSubstitution(matchRepoSubstLine.cap(1));
+                    Match::Substitution subst
+                        = parseSubstitution(matchRepoSubstLine.cap(1));
                     if (!subst.isValid()) {
                         qFatal("Malformed substitution in rules file: line %d: %s",
-                            lineNumber, qPrintable(origLine));
+                               lineNumber, qPrintable(origLine));
                     }
                     match.repo_substs += subst;
                     continue;
                 } else if (matchBranchSubstLine.exactMatch(line)) {
-                    Match::Substitution subst = parseSubstitution(matchBranchSubstLine.cap(1));
+                    Match::Substitution subst
+                        = parseSubstitution(matchBranchSubstLine.cap(1));
                     if (!subst.isValid()) {
                         qFatal("Malformed substitution in rules file: line %d: %s",
-                            lineNumber, qPrintable(origLine));
+                               lineNumber, qPrintable(origLine));
                     }
                     match.branch_substs += subst;
                     continue;
                 } else if (matchRevLine.exactMatch(line)) {
                     if (matchRevLine.cap(1) == "min")
                         match.minRevision = matchRevLine.cap(2).toInt();
-                    else            // must be max
+                    else // must be max
                         match.maxRevision = matchRevLine.cap(2).toInt();
                     continue;
                 } else if (matchPrefixLine.exactMatch(line)) {
                     match.prefix = matchPrefixLine.cap(1);
-                    if( match.prefix.startsWith('/'))
+                    if (match.prefix.startsWith('/'))
                         match.prefix = match.prefix.mid(1);
                     continue;
                 } else if (matchActionLine.exactMatch(line)) {
@@ -271,7 +275,8 @@ void Rules::load(const QString &filename)
                     else if (action == "recurse")
                         match.action = Match::Recurse;
                     else
-                        qFatal("Invalid action \"%s\" on line %d", qPrintable(action), lineNumber);
+                        qFatal("Invalid action \"%s\" on line %d", qPrintable(action),
+                               lineNumber);
                     continue;
                 } else if (matchAnnotateLine.exactMatch(line)) {
                     match.annotate = matchAnnotateLine.cap(1) == "true";
@@ -302,7 +307,7 @@ void Rules::load(const QString &filename)
                 state = ReadingMatch;
                 match = Match();
                 match.rx = QRegExp(matchLine.cap(1), Qt::CaseSensitive, QRegExp::RegExp2);
-                if( !match.rx.isValid() )
+                if (!match.rx.isValid())
                     qFatal("Malformed regular expression '%s' in file:'%s':%d, Error: %s",
                            qPrintable(matchLine.cap(1)), qPrintable(filename), lineNumber,
                            qPrintable(match.rx.errorString()));
@@ -313,28 +318,29 @@ void Rules::load(const QString &filename)
                 QString value = declareLine.cap(2);
                 m_variables.insert(variable, value);
             } else {
-                qFatal("Malformed line in rules file: line %d: %s",
-                       lineNumber, qPrintable(origLine));
+                qFatal("Malformed line in rules file: line %d: %s", lineNumber,
+                       qPrintable(origLine));
             }
         }
     }
 }
 
-Stats *Stats::self = 0;
+Stats* Stats::self = 0;
 
-class Stats::Private
-{
+class Stats::Private {
 public:
     Private();
 
     void printStats() const;
-    void ruleMatched(const Rules::Match &rule, const int rev);
-    void addRule(const Rules::Match &rule);
+    void ruleMatched(const Rules::Match& rule, const int rev);
+    void addRule(const Rules::Match& rule);
+
 private:
-    QMap<Rules::Match,int> m_usedRules;
+    QMap<Rules::Match, int> m_usedRules;
 };
 
-Stats::Stats() : d(new Private())
+Stats::Stats()
+    : d(new Private())
 {
     use = CommandLineParser::instance()->contains("stats");
 }
@@ -346,7 +352,7 @@ Stats::~Stats()
 
 void Stats::init()
 {
-    if(self)
+    if (self)
         delete self;
     self = new Stats();
 }
@@ -358,54 +364,53 @@ Stats* Stats::instance()
 
 void Stats::printStats() const
 {
-    if(use)
+    if (use)
         d->printStats();
 }
 
-void Stats::ruleMatched(const Rules::Match &rule, const int rev)
+void Stats::ruleMatched(const Rules::Match& rule, const int rev)
 {
-    if(use)
+    if (use)
         d->ruleMatched(rule, rev);
 }
 
-void Stats::addRule( const Rules::Match &rule)
+void Stats::addRule(const Rules::Match& rule)
 {
-    if(use)
+    if (use)
         d->addRule(rule);
 }
 
-Stats::Private::Private()
-{
-}
+Stats::Private::Private() { }
 
 void Stats::Private::printStats() const
 {
     printf("\nRule stats\n");
-    foreach(const Rules::Match rule, m_usedRules.keys()) {
+    foreach (const Rules::Match rule, m_usedRules.keys()) {
         printf("%s was matched %i times\n", qPrintable(rule.info()), m_usedRules[rule]);
     }
 }
 
-void Stats::Private::ruleMatched(const Rules::Match &rule, const int rev)
+void Stats::Private::ruleMatched(const Rules::Match& rule, const int rev)
 {
     Q_UNUSED(rev);
-    if(!m_usedRules.contains(rule)) {
+    if (!m_usedRules.contains(rule)) {
         m_usedRules.insert(rule, 1);
-        qWarning() << "WARN: New match rule" << rule.info() << ", should have been added when created.";
+        qWarning() << "WARN: New match rule" << rule.info()
+                   << ", should have been added when created.";
     } else {
         m_usedRules[rule]++;
     }
 }
 
-void Stats::Private::addRule( const Rules::Match &rule)
+void Stats::Private::addRule(const Rules::Match& rule)
 {
-    if(m_usedRules.contains(rule))
+    if (m_usedRules.contains(rule))
         qWarning() << "WARN: Rule" << rule.info() << "was added multiple times.";
     m_usedRules.insert(rule, 0);
 }
 
 #ifndef QT_NO_DEBUG_STREAM
-QDebug operator<<(QDebug s, const Rules::Match &rule)
+QDebug operator<<(QDebug s, const Rules::Match& rule)
 {
     s.nospace() << rule.info();
     return s.space();

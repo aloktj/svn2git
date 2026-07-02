@@ -16,6 +16,41 @@ If you have a proper ruleset the tool will create the git repositories for you a
 
 After it is done you likely want to run `git repack -a -d -f` to compress the pack file as it can get quite big.
 
+Validation & compliance tooling (svn2git-validate)
+--------------------------------------------------
+Alongside the converter, this fork ships `svn2git-validate`: pre/post-migration
+validation and EN 50128 traceability tooling built with CMake (no Qt required).
+
+Build and test:
+```
+sudo apt-get install cmake g++ libspdlog-dev nlohmann-json3-dev libsqlite3-dev catch2 subversion git
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+```
+
+Usage: `svn2git-validate [options] <svn-repository-url>`
+
+| Flag | Effect |
+|------|--------|
+| `--validate-authors-only` | check every SVN author is mapped in authors.txt, then exit |
+| `--auto-map-authors` | write `authors-generated.txt` with placeholder identities for unmapped authors |
+| `--dry-run` | validate authors + rules + orchestration config, preview rule matching on recent history, and print the pre-migration SVN report |
+| `--debug-rules` | interactive rule debugger: type SVN paths, see which rule matches |
+| `--debug` | verbose (debug-level) logging |
+| `--authors <file>` | authors mapping file (default `authors.txt`) |
+| `--rules <file>` | rules file (default `svn2git.rules`) |
+| `--orchestration <file>` | optional orchestration YAML to validate |
+| `--log-file <file>` | persistent log file (default `svn2git.log`) |
+| `--generate-traceability-map` | build `svn_to_git_mapping.json` + `traceability.db` from `--git-repo` |
+| `--git-repo <path>` | converted Git repository for post-migration checks |
+| `--push-gitlab <remote-url>` | integrity-check the converted repository, then push all refs and tags |
+| `--operator <id>` | operator identity recorded in the audit trail |
+
+Every run writes an `audit.log` (migration ID, operator, machine, timestamped
+events, outcome) and, on failure, an `error_report.txt` with error codes and
+remediation suggestions. Exit codes: 0 success, 1 validation failure, 2 usage error.
+
 Running as Docker image
 -----------------------
 Just mount your SVN folder, plus another working directory where Git repository will be created.
