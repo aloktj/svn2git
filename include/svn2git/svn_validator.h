@@ -76,10 +76,12 @@ public:
     /// failure (reported through ErrorReporter).
     double calculateRepositorySize();
 
-private:
-    /// Names of direct children of @p directory ("branches" or "tags").
+    /// Names of direct children of @p directory ("branches", "tags", or
+    /// "" for the repository root). A missing directory yields an empty
+    /// list (layout property, not an error).
     std::vector<std::string> listChildren(const std::string& directory);
 
+private:
     /// Number of revisions touching @p path (via `svn log --quiet`).
     long countCommitsOnPath(const std::string& path);
 

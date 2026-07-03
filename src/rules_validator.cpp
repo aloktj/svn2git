@@ -366,6 +366,73 @@ RulesValidationResult RulesValidator::dryRun(const std::vector<std::string>& sam
     return result;
 }
 
+namespace {
+
+/// Expand QRegExp-style backreferences (\1…\9) from @p match into
+/// @p pattern — the substitution grammar used in svn2git rules files.
+std::string expandBackreferences(const std::string& pattern, const std::smatch& match)
+{
+    std::string expanded;
+    expanded.reserve(pattern.size());
+    std::size_t i = 0;
+    while (i < pattern.size()) {
+        if (pattern[i] == '\\' && i + 1 < pattern.size()
+            && std::isdigit(static_cast<unsigned char>(pattern[i + 1])) != 0) {
+            const std::size_t group = static_cast<std::size_t>(pattern[i + 1] - '0');
+            if (group < match.size())
+                expanded += match[group].str();
+            i += 2; // consume the backslash and the digit
+        } else {
+            expanded += pattern[i];
+            ++i;
+        }
+    }
+    return expanded;
+}
+
+} // namespace
+
+RulesValidator::Resolution RulesValidator::resolveTarget(const std::string& path,
+                                                         std::string& repository,
+                                                         std::string& branch,
+                                                         std::string* prefix) const
+{
+    // Resolution targets the repository's HEAD state, so rules that
+    // expired via 'max revision' are only considered when no unbounded
+    // rule matches — the converter stopped applying them, but they are
+    // the last known mapping for paths nothing else covers.
+    const auto firstMatching = [&](bool allowBounded) -> const MatchRule* {
+        for (const MatchRule& rule : m_matchRules) {
+            if (!allowBounded && rule.maxRevision >= 0)
+                continue;
+            if (!validateRegex(rule.pattern))
+                continue; // invalid patterns already reported by validate()
+            const std::regex re(rule.pattern, std::regex::ECMAScript);
+            if (std::regex_search(path, re, std::regex_constants::match_continuous))
+                return &rule;
+        }
+        return nullptr;
+    };
+
+    const MatchRule* rule = firstMatching(false);
+    if (rule == nullptr)
+        rule = firstMatching(true);
+    if (rule == nullptr)
+        return Resolution::Unmapped;
+
+    const std::regex re(rule->pattern, std::regex::ECMAScript);
+    std::smatch match;
+    std::regex_search(path, match, re, std::regex_constants::match_continuous);
+    if (rule->repository.empty())
+        return Resolution::Ignored;
+    repository = expandBackreferences(rule->repository, match);
+    branch = rule->branch.empty() ? std::string("master")
+                                  : expandBackreferences(rule->branch, match);
+    if (prefix != nullptr)
+        *prefix = expandBackreferences(rule->prefix, match);
+    return Resolution::Mapped;
+}
+
 void RulesValidator::interactiveDebug(std::istream& in, std::ostream& out)
 {
     auto log = logging::get("rules-validator");

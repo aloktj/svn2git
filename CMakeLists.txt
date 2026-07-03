@@ -46,7 +46,8 @@ add_library(svn2git-core STATIC
     src/revision_mapper.cpp
     src/audit_logger.cpp
     src/svn_validator.cpp
-    src/git_validator.cpp)
+    src/git_validator.cpp
+    src/content_validator.cpp)
 
 target_include_directories(svn2git-core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)

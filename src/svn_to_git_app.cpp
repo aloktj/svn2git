@@ -13,6 +13,10 @@
  *    --validate-authors-only       check author coverage and exit
  *    --auto-map-authors            write authors-generated.txt with placeholders
  *    --dry-run                     validate configs and preview rule matching
+ *    --validate-rules-coverage     check rules cover trunk + all branches/tags
+ *    --verify-content              compare file contents of --git-repo
+ *                                  against the SVN source, ref by ref
+ *    --content-samples <n>         cap content-hash checks per ref (0 = all)
  *    --debug-rules                 interactive rule debugger (reads stdin)
  *    --debug                       verbose (debug-level) logging
  *    --log-file <file>             persistent log file (default svn2git.log)
@@ -35,6 +39,7 @@
 #include "svn2git/author_validator.h"
 #include "svn2git/command_runner.h"
 #include "svn2git/config_validator.h"
+#include "svn2git/content_validator.h"
 #include "svn2git/error_reporter.h"
 #include "svn2git/git_validator.h"
 #include "svn2git/logging.h"
@@ -42,9 +47,13 @@
 #include "svn2git/rules_validator.h"
 #include "svn2git/svn_validator.h"
 
+#include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <regex>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -65,12 +74,17 @@ struct Options {
     std::string gitRepoPath;
     std::string gitlabRemote;
     std::string operatorId;
+    std::string targetRepository; ///< rules repository verified against --git-repo
+    long contentSamples = 0; ///< 0 = hash every file
     bool validateAuthorsOnly = false;
     bool autoMapAuthors = false;
     bool dryRun = false;
     bool debugRules = false;
     bool debug = false;
     bool generateTraceabilityMap = false;
+    bool validateRulesCoverage = false;
+    bool verifyContent = false;
+    bool rulesFileSpecified = false; ///< --rules given explicitly
     bool showHelp = false;
 };
 
@@ -87,6 +101,14 @@ void printUsage(std::ostream& out)
            "  --validate-authors-only      check author coverage and exit\n"
            "  --auto-map-authors           generate authors-generated.txt placeholders\n"
            "  --dry-run                    validate configuration and preview rules\n"
+           "  --validate-rules-coverage    check the rules cover trunk + every\n"
+           "                               branch and tag (unmapped = data loss)\n"
+           "  --verify-content             compare file contents of --git-repo\n"
+           "                               against the SVN source, ref by ref\n"
+           "  --content-samples <n>        cap content-hash checks per ref\n"
+           "                               (default 0 = hash every file)\n"
+           "  --target-repository <name>   with multi-repository rules: which\n"
+           "                               rules repository --git-repo holds\n"
            "  --debug-rules                interactive rule debugger\n"
            "  --debug                      verbose logging\n"
            "  --log-file <file>            persistent log file (default: svn2git.log)\n"
@@ -122,6 +144,32 @@ bool parseArguments(int argc, char** argv, Options& options)
             if (value == nullptr)
                 return false;
             options.rulesFile = value;
+            options.rulesFileSpecified = true;
+        } else if (arg == "--content-samples") {
+            const char* value = needsValue(i, "--content-samples");
+            if (value == nullptr)
+                return false;
+            // Whole-string digits only: std::stol alone would silently
+            // accept trailing garbage like "10abc".
+            const std::string text = value;
+            const bool allDigits = !text.empty()
+                && std::all_of(text.begin(), text.end(),
+                               [](unsigned char c) { return std::isdigit(c) != 0; });
+            try {
+                options.contentSamples = allDigits ? std::stol(text) : -1;
+            } catch (const std::exception&) {
+                options.contentSamples = -1; // overflow
+            }
+            if (options.contentSamples < 0) {
+                std::cerr << "error: --content-samples requires a non-negative "
+                             "number\n";
+                return false;
+            }
+        } else if (arg == "--target-repository") {
+            const char* value = needsValue(i, "--target-repository");
+            if (value == nullptr)
+                return false;
+            options.targetRepository = value;
         } else if (arg == "--orchestration") {
             const char* value = needsValue(i, "--orchestration");
             if (value == nullptr)
@@ -159,6 +207,10 @@ bool parseArguments(int argc, char** argv, Options& options)
             options.debug = true;
         } else if (arg == "--generate-traceability-map") {
             options.generateTraceabilityMap = true;
+        } else if (arg == "--validate-rules-coverage") {
+            options.validateRulesCoverage = true;
+        } else if (arg == "--verify-content") {
+            options.verifyContent = true;
         } else if (!arg.empty() && arg[0] == '-') {
             std::cerr << "error: unknown option '" << arg << "'\n";
             return false;
@@ -209,6 +261,23 @@ std::vector<std::string> collectSamplePaths(const std::string& svnUrl, std::size
         paths.push_back(path);
     }
     return paths;
+}
+
+/// Enumerate the repository layout (trunk + /branches/* + /tags/*)
+/// independently of commit counting, so branches whose history queries
+/// fail are still subject to coverage/content checks.
+/// @return false when nothing was found — unreachable URL or
+///         non-standard layout; validation cannot proceed meaningfully
+bool discoverLayout(svn2git::SVNValidator& svn, std::vector<std::string>& branches,
+                    std::vector<std::string>& tags)
+{
+    const std::vector<std::string> rootEntries = svn.listChildren("");
+    if (std::find(rootEntries.begin(), rootEntries.end(), "trunk") != rootEntries.end())
+        branches.push_back("trunk");
+    for (const std::string& name : svn.listChildren("branches"))
+        branches.push_back(name);
+    tags = svn.listChildren("tags");
+    return !branches.empty() || !tags.empty();
 }
 
 /// Push the converted repository to a GitLab remote (all refs + tags).
@@ -502,6 +571,83 @@ int main(int argc, char** argv)
             success = false;
     }
 
+    if (options.validateRulesCoverage) {
+        svn2git::RulesValidator rules(options.rulesFile, reporter);
+        const svn2git::RulesValidationResult rulesResult = rules.validate();
+        if (!rulesResult.valid) {
+            std::cout << "rules file '" << options.rulesFile
+                      << "' has errors — fix them before checking coverage:\n";
+            for (const std::string& error : rulesResult.errors)
+                std::cout << "  " << error << '\n';
+            audit.logEvent("Validation", "rules coverage: rules file invalid", "FAILED");
+            success = false;
+        } else {
+            svn2git::SVNValidator svn(options.svnUrl, reporter);
+            // Layout discovery is independent of commit counting: a
+            // branch whose `svn log` fails must still be coverage-checked.
+            std::vector<std::string> branches;
+            std::vector<std::string> tags;
+            if (!discoverLayout(svn, branches, tags)) {
+                reporter.report(svn2git::ErrorCode::ExternalToolError,
+                                "no trunk/branches/tags discovered — check the SVN "
+                                "URL and repository layout",
+                                options.svnUrl);
+                audit.logEvent("Validation", "rules coverage: layout discovery empty",
+                               "FAILED");
+                success = false;
+            } else {
+                const std::map<std::string, long> branchCommits
+                    = svn.countCommitsByBranch();
+                const std::map<std::string, long> tagCommits = svn.countCommitsByTag();
+
+                // Commit counts are display-only; "?" marks a failed query.
+                const auto commitsFor = [&](const std::string& svnPath) -> std::string {
+                    if (svnPath.rfind("tags/", 0) == 0) {
+                        const auto it = tagCommits.find(svnPath.substr(5));
+                        return it != tagCommits.end() ? std::to_string(it->second) : "?";
+                    }
+                    const std::string name = svnPath.rfind("branches/", 0) == 0
+                        ? svnPath.substr(9)
+                        : svnPath;
+                    const auto it = branchCommits.find(name);
+                    return it != branchCommits.end() ? std::to_string(it->second) : "?";
+                };
+
+                std::vector<std::string> unmapped;
+                std::vector<std::string> ignored;
+                const std::vector<svn2git::RefMapping> mappings
+                    = svn2git::ContentValidator::mapWithRules(rules, branches, tags,
+                                                              unmapped, ignored);
+
+                std::cout << "RULES COVERAGE — " << branches.size() << " branch(es), "
+                          << tags.size() << " tag(s) found in the repository:\n";
+                for (const svn2git::RefMapping& mapping : mappings)
+                    std::cout << "  /" << mapping.svnPath << "/ -> repository '"
+                              << mapping.repository << "', branch '" << mapping.gitRef
+                              << "' (" << commitsFor(mapping.svnPath) << " commit(s))\n";
+                for (const std::string& path : ignored)
+                    std::cout << "  /" << path << "/ -> IGNORED by an explicit rule\n";
+                for (const std::string& path : unmapped) {
+                    std::cout << "  /" << path
+                              << "/ -> UNMAPPED — its history would be dropped!\n";
+                    reporter.report(svn2git::ErrorCode::UnmappedSvnPath,
+                                    "no rule matches '/" + path + "/'",
+                                    options.rulesFile);
+                }
+
+                const bool covered = unmapped.empty();
+                audit.logEvent("Validation",
+                               "rules coverage: " + std::to_string(mappings.size())
+                                   + " mapped, " + std::to_string(ignored.size())
+                                   + " ignored, " + std::to_string(unmapped.size())
+                                   + " unmapped",
+                               covered ? "OK" : "FAILED");
+                if (!covered)
+                    success = false;
+            }
+        }
+    }
+
     if (options.generateTraceabilityMap) {
         if (options.gitRepoPath.empty()) {
             std::cerr << "error: --generate-traceability-map requires --git-repo\n";
@@ -514,6 +660,111 @@ int main(int argc, char** argv)
                        ok ? "OK" : "FAILED");
         if (!ok)
             success = false;
+    }
+
+    if (options.verifyContent) {
+        if (options.gitRepoPath.empty()) {
+            std::cerr << "error: --verify-content requires --git-repo\n";
+            svn2git::logging::shutdown();
+            return kExitUsageError;
+        }
+
+        svn2git::SVNValidator svn(options.svnUrl, reporter);
+        std::vector<std::string> branches;
+        std::vector<std::string> tags;
+        // An empty discovery must fail loudly: verifying zero refs would
+        // otherwise turn an unreachable SVN URL into a false PASS.
+        bool mappingsOk = discoverLayout(svn, branches, tags);
+        if (!mappingsOk) {
+            reporter.report(svn2git::ErrorCode::ExternalToolError,
+                            "no trunk/branches/tags discovered — nothing to verify; "
+                            "check the SVN URL and repository layout",
+                            options.svnUrl);
+            audit.logEvent("Validation", "content verification: layout discovery empty",
+                           "FAILED");
+            success = false;
+        }
+
+        // With an explicit rules file the SVN→Git ref mapping is derived
+        // from the rules (matching the conversion); otherwise the
+        // standard layout convention applies.
+        std::vector<svn2git::RefMapping> mappings;
+        if (mappingsOk && options.rulesFileSpecified) {
+            svn2git::RulesValidator rules(options.rulesFile, reporter);
+            const svn2git::RulesValidationResult rulesResult = rules.validate();
+            if (!rulesResult.valid) {
+                std::cout << "rules file '" << options.rulesFile
+                          << "' has errors — cannot derive the ref mapping\n";
+                audit.logEvent("Validation", "content verification: rules file invalid",
+                               "FAILED");
+                mappingsOk = false;
+                success = false;
+            } else {
+                std::vector<std::string> unmapped;
+                std::vector<std::string> ignored;
+                mappings = svn2git::ContentValidator::mapWithRules(rules, branches, tags,
+                                                                   unmapped, ignored);
+                for (const std::string& path : unmapped) {
+                    reporter.report(svn2git::ErrorCode::UnmappedSvnPath,
+                                    "no rule matches '/" + path
+                                        + "/' — it cannot be verified and was "
+                                          "not converted",
+                                    options.rulesFile);
+                    success = false;
+                }
+
+                // Multi-repository rules: --git-repo holds exactly one of
+                // the target repositories, so the refs of the others must
+                // not be verified against it (false missing/mismatch).
+                std::set<std::string> repositories;
+                for (const svn2git::RefMapping& mapping : mappings)
+                    repositories.insert(mapping.repository);
+                if (!options.targetRepository.empty()) {
+                    std::vector<svn2git::RefMapping> filtered;
+                    for (svn2git::RefMapping& mapping : mappings)
+                        if (mapping.repository == options.targetRepository)
+                            filtered.push_back(std::move(mapping));
+                    if (filtered.empty()) {
+                        std::cerr << "error: no rule maps to repository '"
+                                  << options.targetRepository << "'\n";
+                        svn2git::logging::shutdown();
+                        return kExitUsageError;
+                    }
+                    mappings = std::move(filtered);
+                } else if (repositories.size() > 1) {
+                    std::cerr << "error: the rules map to " << repositories.size()
+                              << " repositories — pass --target-repository <name> "
+                                 "to select the one --git-repo holds\n";
+                    svn2git::logging::shutdown();
+                    return kExitUsageError;
+                }
+            }
+        } else if (mappingsOk) {
+            mappings = svn2git::ContentValidator::standardLayoutMappings(branches, tags);
+        }
+
+        if (mappingsOk) {
+            svn2git::ContentValidator content(options.svnUrl, options.gitRepoPath,
+                                              reporter);
+            const svn2git::ContentReport contentReport
+                = content.verify(mappings, options.contentSamples);
+            std::cout << contentReport.toText();
+
+            const std::string reportFileName = "content_validation_report.txt";
+            std::ofstream reportFile(reportFileName, std::ios::trunc);
+            reportFile << contentReport.toText();
+            reportFile.flush();
+            if (!reportFile.good())
+                reporter.report(svn2git::ErrorCode::FileAccessError,
+                                "cannot write content validation report", reportFileName);
+
+            audit.logEvent("Validation",
+                           "content verification over " + std::to_string(mappings.size())
+                               + " ref(s)",
+                           contentReport.ok ? "OK" : "FAILED");
+            if (!contentReport.ok)
+                success = false;
+        }
     }
 
     if (!options.gitlabRemote.empty()) {
