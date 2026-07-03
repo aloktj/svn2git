@@ -3,34 +3,35 @@
 
 # Create the target Git repository
 create repository platform-git
+end repository
 
 # Trunk → master branch
 match /trunk
 	repository platform-git
 	branch master
-	end
+end match
 
 # Feature branches (platform-1000, platform-1001, etc.)
 match /branches/platform-[0-9]+
 	repository platform-git
 	branch refs/heads/branches/\1
-	end
+end match
 
 # Support/maintenance branches (platform-bl*)
 match /branches/platform-bl[0-9]+
 	repository platform-git
 	branch refs/heads/branches/\1
-	end
+end match
 
 # Tags from support branches only (PLATFORM-BLXXX format)
 # Tags are created from commits on support branches
 match /tags/PLATFORM-BL[0-9]+
 	repository platform-git
 	tag \1
-	end
+end match
 
 # Ignore any other paths that don't match above rules
 # This prevents unwanted commits from being migrated
 match /
 	action ignore
-	end
+end match

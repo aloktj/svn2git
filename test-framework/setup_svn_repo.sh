@@ -113,7 +113,7 @@ for ((i = 1; i <= TRUNK_COMMITS; i++)); do
 
 	"${SVN_PATH}" commit -m "${MESSAGE}" --username "${AUTHOR}" >> "${LOG_FILE}" 2>&1
 
-	((TRUNK_COMMIT_COUNT++))
+	TRUNK_COMMIT_COUNT=$((TRUNK_COMMIT_COUNT + 1))
 
 	# Progress indicator
 	if [ $((i % COMMIT_INTERVAL)) -eq 0 ]; then
@@ -182,7 +182,7 @@ for ((i = 1; i <= FEATURE_BRANCHES_COMMITS; i++)); do
 
 	"${SVN_PATH}" commit -m "${MESSAGE}" --username "${AUTHOR}" >> "${LOG_FILE}" 2>&1
 
-	((FEATURE_COMMIT_COUNT++))
+	FEATURE_COMMIT_COUNT=$((FEATURE_COMMIT_COUNT + 1))
 
 	if [ $((i % 500)) -eq 0 ]; then
 		PROGRESS=$((i * 100 / FEATURE_BRANCHES_COMMITS))
@@ -219,7 +219,7 @@ for ((i = 1; i <= SUPPORT_BRANCHES_COMMITS; i++)); do
 
 	"${SVN_PATH}" commit -m "${MESSAGE}" --username "${AUTHOR}" >> "${LOG_FILE}" 2>&1
 
-	((SUPPORT_COMMIT_COUNT++))
+	SUPPORT_COMMIT_COUNT=$((SUPPORT_COMMIT_COUNT + 1))
 
 	if [ $((i % 200)) -eq 0 ]; then
 		PROGRESS=$((i * 100 / SUPPORT_BRANCHES_COMMITS))

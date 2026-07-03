@@ -105,15 +105,16 @@ log "✓ Rules file validated"
 log "Running svn2git migration..."
 MIGRATION_START=$(date +%s)
 
-log "Command: ${SVN2GIT_BINARY} file://${SVN_REPO_PATH} -o ${GIT_REPO_PATH} -r ${SCRIPT_DIR}/${RULES_FILE} -A ${SCRIPT_DIR}/${AUTHORS_FILE} --generate-traceability-map --operator testengr"
+# Change to output directory for Git repository creation
+mkdir -p "${GIT_OUTPUT_DIR}"
+cd "${GIT_OUTPUT_DIR}"
+
+log "Command: ${SVN2GIT_BINARY} --identity-map ${SCRIPT_DIR}/${AUTHORS_FILE} --rules ${SCRIPT_DIR}/${RULES_FILE} file://${SVN_REPO_PATH}"
 
 if "${SVN2GIT_BINARY}" \
+	--identity-map "${SCRIPT_DIR}/${AUTHORS_FILE}" \
+	--rules "${SCRIPT_DIR}/${RULES_FILE}" \
 	"file://${SVN_REPO_PATH}" \
-	-o "${GIT_REPO_PATH}" \
-	-r "${SCRIPT_DIR}/${RULES_FILE}" \
-	-A "${SCRIPT_DIR}/${AUTHORS_FILE}" \
-	--generate-traceability-map \
-	--operator testengr \
 	>> "${LOG_FILE}" 2>&1; then
 	MIGRATION_END=$(date +%s)
 	MIGRATION_DURATION=$((MIGRATION_END - MIGRATION_START))
@@ -122,20 +123,12 @@ else
 	error "Migration failed!" && exit 1
 fi
 
-# Verify Git repository was created
-if [ ! -d "${GIT_REPO_PATH}" ]; then
-	error "Git repository not created at ${GIT_REPO_PATH}" && exit 1
+# Verify Git repository was created (svn2git creates it in current directory based on .rules)
+ACTUAL_GIT_REPO_PATH="${GIT_OUTPUT_DIR}/platform-git"
+if [ ! -d "${ACTUAL_GIT_REPO_PATH}" ]; then
+	error "Git repository not created at ${ACTUAL_GIT_REPO_PATH}" && exit 1
 fi
-log "✓ Git repository created at ${GIT_REPO_PATH}"
-
-# Check for traceability files
-if [ -f "${GIT_REPO_PATH}/svn_to_git_mapping.json" ]; then
-	log "✓ SVN-to-Git mapping (JSON) created"
-fi
-
-if [ -f "${GIT_REPO_PATH}/traceability.db" ]; then
-	log "✓ Traceability database created"
-fi
+log "✓ Git repository created at ${ACTUAL_GIT_REPO_PATH}"
 
 # Export migration information
 cat > "${TEST_SESSION_DIR}/migration_info.txt" << EOF
@@ -146,12 +139,11 @@ End Time: $(date -d @${MIGRATION_END})
 Duration (seconds): ${MIGRATION_DURATION}
 
 SVN Repository: ${SVN_REPO_PATH}
-Git Repository: ${GIT_REPO_PATH}
+Git Repository: ${ACTUAL_GIT_REPO_PATH}
 Rules File: ${SCRIPT_DIR}/${RULES_FILE}
 Authors File: ${SCRIPT_DIR}/${AUTHORS_FILE}
 
 svn2git Binary: ${SVN2GIT_BINARY}
-Command: ${SVN2GIT_CMD}
 
 Status: SUCCESS
 EOF
