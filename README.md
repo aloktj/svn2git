@@ -36,6 +36,9 @@ Usage: `svn2git-validate [options] <svn-repository-url>`
 | `--validate-authors-only` | check every SVN author is mapped in authors.txt, then exit |
 | `--auto-map-authors` | write `authors-generated.txt` with placeholder identities for unmapped authors |
 | `--dry-run` | validate authors + rules + orchestration config, preview rule matching on recent history, and print the pre-migration SVN report |
+| `--validate-rules-coverage` | check the rules file covers trunk + every real branch and tag in the repository — anything unmapped would be silently dropped by the converter |
+| `--verify-content` | compare file contents of the converted `--git-repo` against the SVN source, ref by ref (complete inventory + content-hash comparison) — catches cheap-copy data loss that structural checks miss |
+| `--content-samples <n>` | cap content-hash checks per ref for huge repositories (default 0 = hash every file) |
 | `--debug-rules` | interactive rule debugger: type SVN paths, see which rule matches |
 | `--debug` | verbose (debug-level) logging |
 | `--authors <file>` | authors mapping file (default `authors.txt`) |
@@ -50,6 +53,27 @@ Usage: `svn2git-validate [options] <svn-repository-url>`
 Every run writes an `audit.log` (migration ID, operator, machine, timestamped
 events, outcome) and, on failure, an `error_report.txt` with error codes and
 remediation suggestions. Exit codes: 0 success, 1 validation failure, 2 usage error.
+
+Recommended migration workflow:
+```
+# 1. Before converting: prove the rules cover every branch and tag
+svn2git-validate --validate-rules-coverage --rules project.rules <svn-url>
+
+# 2. Convert with the classic converter
+svn-all-fast-export --identity-map authors.txt --rules project.rules --add-metadata <svn-repo>
+
+# 3. After converting: prove no file content was lost or corrupted
+#    (--rules derives the SVN→Git ref mapping; omit it for standard layouts)
+svn2git-validate --verify-content --git-repo <converted-repo> --rules project.rules <svn-url>
+#    writes content_validation_report.txt for the migration dossier
+
+# 4. Push only after everything passes
+svn2git-validate --git-repo <converted-repo> --push-gitlab <gitlab-remote-url> <svn-url>
+```
+The `--verify-content` check compares the complete file inventory of every
+branch/tag and the exact content (git blob hash) of every file against the
+SVN source — this is what catches a branch created as an SVN cheap copy
+arriving in Git without the files it inherited from the copy source.
 
 Running as Docker image
 -----------------------

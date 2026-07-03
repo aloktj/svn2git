@@ -18,7 +18,8 @@ add_executable(svn2git-unit-tests
     unit/test_error_reporter.cpp
     unit/test_config_validator.cpp
     unit/test_revision_mapper.cpp
-    unit/test_audit_logger.cpp)
+    unit/test_audit_logger.cpp
+    unit/test_content_validator.cpp)
 
 target_link_libraries(svn2git-unit-tests PRIVATE
     svn2git-core
@@ -29,7 +30,8 @@ target_compile_definitions(svn2git-unit-tests PRIVATE
 add_executable(svn2git-integration-tests
     integration/test_svn_validation.cpp
     integration/test_git_validation.cpp
-    integration/test_full_migration.cpp)
+    integration/test_full_migration.cpp
+    integration/test_content_validation.cpp)
 
 target_link_libraries(svn2git-integration-tests PRIVATE
     svn2git-core

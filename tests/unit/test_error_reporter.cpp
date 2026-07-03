@@ -46,6 +46,8 @@ TEST_CASE("every error code has a distinct stable name", "[error-reporter]")
         ErrorCode::GitLabConnectionError,   ErrorCode::InvalidEmail,
         ErrorCode::DuplicateAuthorEntry,    ErrorCode::InvalidRegexPattern,
         ErrorCode::FileAccessError,         ErrorCode::ExternalToolError,
+        ErrorCode::ContentMismatch,         ErrorCode::FileMissingInGit,
+        ErrorCode::UnmappedSvnPath,
     };
     std::set<std::string> names;
     for (const ErrorCode code : codes) {
@@ -65,6 +67,8 @@ TEST_CASE("every error code maps to a non-empty suggestion", "[error-reporter]")
         ErrorCode::GitLabConnectionError,   ErrorCode::InvalidEmail,
         ErrorCode::DuplicateAuthorEntry,    ErrorCode::InvalidRegexPattern,
         ErrorCode::FileAccessError,         ErrorCode::ExternalToolError,
+        ErrorCode::ContentMismatch,         ErrorCode::FileMissingInGit,
+        ErrorCode::UnmappedSvnPath,
     };
     for (const ErrorCode code : codes)
         CHECK_FALSE(ErrorReporter::suggestionFor(code).empty());

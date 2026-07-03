@@ -71,6 +71,12 @@ std::string ErrorReporter::codeName(ErrorCode code)
         return "E011_FILE_ACCESS_ERROR";
     case ErrorCode::ExternalToolError:
         return "E012_EXTERNAL_TOOL_ERROR";
+    case ErrorCode::ContentMismatch:
+        return "E013_CONTENT_MISMATCH";
+    case ErrorCode::FileMissingInGit:
+        return "E014_FILE_MISSING_IN_GIT";
+    case ErrorCode::UnmappedSvnPath:
+        return "E015_UNMAPPED_SVN_PATH";
     }
     return "E999_UNKNOWN"; // defensive: unreachable with a valid enum
 }
@@ -123,6 +129,22 @@ std::string ErrorReporter::suggestionFor(ErrorCode code)
     case ErrorCode::ExternalToolError:
         return "Ensure the required tool (svn, git, gpg) is installed and on "
                "PATH; re-run with --debug to capture the full command output.";
+    case ErrorCode::ContentMismatch:
+        return "The converted file's content differs from the SVN source. "
+               "Compare with 'svn cat <url>/<path>' vs 'git show <ref>:<path>'; "
+               "check eol-style/keyword property handling and re-convert the "
+               "affected branch before pushing.";
+    case ErrorCode::FileMissingInGit:
+        return "The file (or whole branch/tag) exists in SVN but not in the "
+               "converted repository — the classic symptom of a cheap-copy "
+               "branch whose copy source was not covered by any match rule. "
+               "Run --validate-rules-coverage and add a rule for the copy "
+               "source, then re-convert.";
+    case ErrorCode::UnmappedSvnPath:
+        return "The branch/tag directory matches no rule, so its entire "
+               "history would be silently dropped by the converter. Add a "
+               "'match' rule for the path (or an explicit ignore rule if the "
+               "omission is intentional) before migrating.";
     }
     return "No suggestion available."; // defensive: unreachable with a valid enum
 }

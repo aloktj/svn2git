@@ -366,6 +366,51 @@ RulesValidationResult RulesValidator::dryRun(const std::vector<std::string>& sam
     return result;
 }
 
+namespace {
+
+/// Expand QRegExp-style backreferences (\1…\9) from @p match into
+/// @p pattern — the substitution grammar used in svn2git rules files.
+std::string expandBackreferences(const std::string& pattern, const std::smatch& match)
+{
+    std::string expanded;
+    expanded.reserve(pattern.size());
+    for (std::size_t i = 0; i < pattern.size(); ++i) {
+        if (pattern[i] == '\\' && i + 1 < pattern.size()
+            && std::isdigit(static_cast<unsigned char>(pattern[i + 1])) != 0) {
+            const std::size_t group = static_cast<std::size_t>(pattern[i + 1] - '0');
+            if (group < match.size())
+                expanded += match[group].str();
+            ++i;
+        } else {
+            expanded += pattern[i];
+        }
+    }
+    return expanded;
+}
+
+} // namespace
+
+RulesValidator::Resolution RulesValidator::resolveTarget(const std::string& path,
+                                                         std::string& repository,
+                                                         std::string& branch) const
+{
+    for (const MatchRule& rule : m_matchRules) {
+        if (!validateRegex(rule.pattern))
+            continue; // invalid patterns already reported by validate()
+        const std::regex re(rule.pattern, std::regex::ECMAScript);
+        std::smatch match;
+        if (!std::regex_search(path, match, re, std::regex_constants::match_continuous))
+            continue;
+        if (rule.repository.empty())
+            return Resolution::Ignored;
+        repository = expandBackreferences(rule.repository, match);
+        branch = rule.branch.empty() ? std::string("master")
+                                     : expandBackreferences(rule.branch, match);
+        return Resolution::Mapped;
+    }
+    return Resolution::Unmapped;
+}
+
 void RulesValidator::interactiveDebug(std::istream& in, std::ostream& out)
 {
     auto log = logging::get("rules-validator");

@@ -86,6 +86,24 @@ public:
     /// the CLI; tests pass string streams.
     void interactiveDebug(std::istream& in, std::ostream& out);
 
+    /// Outcome of resolving one SVN path through the rule list.
+    enum class Resolution : std::uint8_t {
+        Mapped, ///< a rule maps the path to repository/branch
+        Ignored, ///< the first matching rule is an ignore rule
+        Unmapped ///< no rule matches — history would be dropped
+    };
+
+    /// Resolve @p path (e.g. "/branches/release-1.0/") through the rules
+    /// exactly like the converter: first match wins, and backreferences
+    /// (\1…\9) in the rule's repository/branch fields are expanded from
+    /// the pattern's capture groups. A rule without an explicit branch
+    /// maps to "master" (the converter's default). Requires validate()
+    /// or dryRun() to have parsed the file first.
+    /// @param[out] repository  expanded target repository (Mapped only)
+    /// @param[out] branch      expanded target branch (Mapped only)
+    Resolution resolveTarget(const std::string& path, std::string& repository,
+                             std::string& branch) const;
+
     /// Rules parsed by the last validate()/dryRun() call.
     const std::vector<MatchRule>& matchRules() const { return m_matchRules; }
     const std::vector<RepositoryRule>& repositories() const { return m_repositories; }

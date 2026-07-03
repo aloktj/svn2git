@@ -37,7 +37,10 @@ enum class ErrorCode : std::uint8_t {
     DuplicateAuthorEntry, ///< same SVN username mapped twice
     InvalidRegexPattern, ///< match pattern is not a valid regex
     FileAccessError, ///< configuration/output file unreadable or unwritable
-    ExternalToolError ///< svn/git/gpg invocation failed
+    ExternalToolError, ///< svn/git/gpg invocation failed
+    ContentMismatch, ///< file content differs between SVN and converted Git
+    FileMissingInGit, ///< file or ref present in SVN but absent from Git
+    UnmappedSvnPath ///< SVN branch/tag path matched by no rule
 };
 
 /// One recorded error occurrence.
