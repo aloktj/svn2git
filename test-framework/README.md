@@ -34,6 +34,7 @@ This test framework validates that `svn2git` correctly:
 | File | Purpose |
 |------|---------|
 | `test_svn2git.sh` | Master orchestrator - runs complete test pipeline |
+| `test_validate_options.sh` | Exercises every `svn2git-validate` CLI option |
 | `setup_svn_repo.sh` | Creates realistic SVN repository (10,000+ revisions) |
 | `run_migration.sh` | Executes SVN2Git migration with validation |
 | `validate_migration.sh` | Post-migration verification and reporting |
@@ -42,6 +43,36 @@ This test framework validates that `svn2git` correctly:
 | `authors.txt` | 50 SVN-to-Git author mappings |
 | `.rules` | SVN2Git rules file (path → repository/branch routing) |
 | `README.md` | This file |
+
+## Testing the svn2git-validate CLI
+
+`test_validate_options.sh` exercises **all 13 options** of the `svn2git-validate`
+compliance tool (`--validate-authors-only`, `--auto-map-authors`, `--dry-run`,
+`--debug-rules`, `--debug`, `--authors`, `--rules`, `--orchestration`,
+`--log-file`, `--generate-traceability-map`, `--git-repo`, `--push-gitlab`,
+`--operator`) plus the exit-code contract (0 success / 1 validation failure /
+2 usage error).
+
+Because `--debug-rules` returns immediately after its interactive session and
+`--validate-authors-only` exits right after the author check, a single
+invocation cannot combine every flag — the script covers them across 8
+sequential phases, each in its own working directory (the tool writes
+`audit.log`, `error_report.txt`, `svn_to_git_mapping.json`, `traceability.db`
+and `authors-generated.txt` to the current directory with fixed names).
+
+```bash
+# Builds build/svn2git-validate if needed, then runs all phases (~10 seconds)
+./test_validate_options.sh
+
+# Custom workspace (default: /tmp/svn2git_validate_test)
+WORK_DIR=/path/to/workspace ./test_validate_options.sh
+```
+
+Fixtures are generated automatically: a 6-revision SVN repo
+(`tests/fixtures/create-test-svn-repo.sh`), a converted Git repo with
+`git-svn-id` metadata trailers, and a local bare repository standing in as
+the GitLab push target. Requires `svn`, `svnadmin`, `git`, `cmake`,
+`sqlite3`, `python3`.
 
 ## Configuration
 
