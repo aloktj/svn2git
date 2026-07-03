@@ -85,8 +85,8 @@ log "✓ Initial commit (revision 1)"
 # Generate commits on trunk
 log "Generating ${TRUNK_COMMITS} commits on trunk..."
 TRUNK_COMMIT_COUNT=0
-COMMIT_INCREMENT=$((TRUNK_COMMITS / 100))  # Progress indicator every 100 commits
 COMMIT_INTERVAL=$((TRUNK_COMMITS / 50))    # 50 progress checkpoints
+[ "${COMMIT_INTERVAL}" -lt 1 ] && COMMIT_INTERVAL=1
 
 for ((i = 1; i <= TRUNK_COMMITS; i++)); do
 	# Random author from our 50-author pool
@@ -125,13 +125,14 @@ log "✓ Generated ${TRUNK_COMMIT_COUNT} commits on trunk"
 
 # Create branches
 log "Creating ${NUM_REGULAR_BRANCHES} feature branches..."
-CURRENT_REVISION=$("${SVN_PATH}" info "${REPO_WC}/trunk" | grep "Revision:" | awk '{print $2}')
 
 for ((i = 0; i < NUM_REGULAR_BRANCHES; i++)); do
 	BRANCH_NAME="platform-$((1000 + i))"
 	BRANCH_PATH="branches/${BRANCH_NAME}"
 
-	"${SVN_PATH}" copy trunk "${BRANCH_PATH}" -m "Create branch ${BRANCH_NAME}" --username "alice" >> "${LOG_FILE}" 2>&1
+	# Working-copy copies don't take -m; copy then commit separately
+	"${SVN_PATH}" copy trunk "${BRANCH_PATH}" >> "${LOG_FILE}" 2>&1
+	"${SVN_PATH}" commit -m "Create branch ${BRANCH_NAME}" --username "alice" >> "${LOG_FILE}" 2>&1
 
 	if [ $((i % 10)) -eq 0 ]; then
 		log "  Created $((i + 1))/${NUM_REGULAR_BRANCHES} feature branches"
@@ -142,10 +143,12 @@ log "✓ Created ${NUM_REGULAR_BRANCHES} feature branches"
 # Create support branches
 log "Creating ${NUM_SUPPORT_BRANCHES} support branches..."
 for ((i = 2; i <= NUM_SUPPORT_BRANCHES + 1; i++)); do
-	BRANCH_NAME="platform-bl10$i"
+	BRANCH_NAME="platform-bl$((100 + i))"
 	BRANCH_PATH="branches/${BRANCH_NAME}"
 
-	"${SVN_PATH}" copy trunk "${BRANCH_PATH}" -m "Create support branch ${BRANCH_NAME}" --username "alice" >> "${LOG_FILE}" 2>&1
+	# Working-copy copies don't take -m; copy then commit separately
+	"${SVN_PATH}" copy trunk "${BRANCH_PATH}" >> "${LOG_FILE}" 2>&1
+	"${SVN_PATH}" commit -m "Create support branch ${BRANCH_NAME}" --username "alice" >> "${LOG_FILE}" 2>&1
 
 	if [ $((i % 5)) -eq 0 ]; then
 		log "  Created $((i - 1))/${NUM_SUPPORT_BRANCHES} support branches"
@@ -198,7 +201,7 @@ SUPPORT_COMMIT_COUNT=0
 for ((i = 1; i <= SUPPORT_BRANCHES_COMMITS; i++)); do
 	# Pick a random support branch
 	SUPPORT_INDEX=$((RANDOM % NUM_SUPPORT_BRANCHES + 2))
-	BRANCH_NAME="platform-bl10${SUPPORT_INDEX}"
+	BRANCH_NAME="platform-bl$((100 + SUPPORT_INDEX))"
 	BRANCH_PATH="branches/${BRANCH_NAME}"
 
 	FILE_NUM=$((RANDOM % NUM_C_FILES + 1))
@@ -233,22 +236,25 @@ log "Creating tags from support branches..."
 TAG_COUNT=0
 
 for ((i = 2; i <= NUM_SUPPORT_BRANCHES + 1; i++)); do
-	BRANCH_NAME="platform-bl10${i}"
+	BRANCH_NAME="platform-bl$((100 + i))"
 	BRANCH_PATH="branches/${BRANCH_NAME}"
 	TAG_COUNT=$((i - 1))
 
 	# Create multiple tags per support branch
 	for ((t = 1; t <= 3; t++)); do
-		TAG_NAME="PLATFORM-BL10${i}-v${t}"
+		TAG_NAME="PLATFORM-BL$((100 + i))-v${t}"
 		TAG_PATH="tags/${TAG_NAME}"
 
-		"${SVN_PATH}" copy "${BRANCH_PATH}" "${TAG_PATH}" -m "Create tag ${TAG_NAME} from support branch ${BRANCH_NAME}" --username "alice" >> "${LOG_FILE}" 2>&1
+		# Working-copy copies don't take -m; copy then commit separately
+		"${SVN_PATH}" copy "${BRANCH_PATH}" "${TAG_PATH}" >> "${LOG_FILE}" 2>&1
+		"${SVN_PATH}" commit -m "Create tag ${TAG_NAME} from support branch ${BRANCH_NAME}" --username "alice" >> "${LOG_FILE}" 2>&1
 	done
 done
 log "✓ Created tags from support branches (approximately $((NUM_SUPPORT_BRANCHES * 3)) tags)"
 
 # Verify repository
-FINAL_REVISION=$("${SVN_PATH}" info "${REPO_WC}" | grep "Revision:" | awk '{print $2}')
+# The working copy is stale after commits — ask the repository itself
+FINAL_REVISION=$(svnlook youngest "${SVN_REPO_PATH}")
 log "Final repository revision: ${FINAL_REVISION}"
 
 # Cleanup

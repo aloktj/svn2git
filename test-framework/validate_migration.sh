@@ -21,9 +21,11 @@ log() {
 	echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" | tee -a "${LOG_FILE}"
 }
 
+# Fatal: log and terminate. Must exit here — 'error ... && exit 1' would
+# never reach the exit because the && short-circuits on error's own status.
 error() {
 	echo "[ERROR] $*" | tee -a "${LOG_FILE}" >&2
-	return 1
+	exit 1
 }
 
 # Color codes
@@ -35,7 +37,7 @@ log "Starting post-migration validation..."
 
 # Verify Git repository exists
 if [ ! -d "${GIT_REPO_PATH}" ]; then
-	error "Git repository not found at ${GIT_REPO_PATH}" && exit 1
+	error "Git repository not found at ${GIT_REPO_PATH}"
 fi
 
 log "✓ Git repository found"
@@ -93,7 +95,7 @@ log "Verifying branch naming conventions..."
 EXPECTED_BRANCHES_FOUND=0
 for branch in $(git branch -a 2>> "${LOG_FILE}" | grep -v "HEAD" | grep -v "master"); do
 	if echo "${branch}" | grep -qE "platform-[0-9]+|platform-bl[0-9]+"; then
-		((EXPECTED_BRANCHES_FOUND++))
+		EXPECTED_BRANCHES_FOUND=$((EXPECTED_BRANCHES_FOUND + 1))
 	fi
 done
 log "  Expected branch patterns found: ${EXPECTED_BRANCHES_FOUND}/${GIT_BRANCH_COUNT}"
@@ -104,7 +106,7 @@ INVALID_TAGS=0
 for tag in $(git tag -l 2>> "${LOG_FILE}"); do
 	if ! echo "${tag}" | grep -qE "^PLATFORM-BL[0-9]+"; then
 		log "  Warning: Unexpected tag format: ${tag}"
-		((INVALID_TAGS++))
+		INVALID_TAGS=$((INVALID_TAGS + 1))
 	fi
 done
 
@@ -122,7 +124,7 @@ if git show-ref --verify --quiet refs/heads/master 2>> "${LOG_FILE}"; then
 	MASTER_COMMITS=$(git rev-list --count master 2>> "${LOG_FILE}")
 	log "  Commits on master: ${MASTER_COMMITS}"
 else
-	error "Master branch not found!" && exit 1
+	error "Master branch not found!"
 fi
 
 # Verify file presence
@@ -131,19 +133,19 @@ FILE_CHECK_PASS=0
 if git ls-tree -r master 2>> "${LOG_FILE}" | grep -q "\.c$"; then
 	log "✓ C source files found"
 	C_FILE_COUNT=$(git ls-tree -r master 2>> "${LOG_FILE}" | grep -c "\.c$")
-	((FILE_CHECK_PASS++))
+	FILE_CHECK_PASS=$((FILE_CHECK_PASS + 1))
 fi
 
 if git ls-tree -r master 2>> "${LOG_FILE}" | grep -q "\.h$"; then
 	log "✓ Header files found"
 	H_FILE_COUNT=$(git ls-tree -r master 2>> "${LOG_FILE}" | grep -c "\.h$")
-	((FILE_CHECK_PASS++))
+	FILE_CHECK_PASS=$((FILE_CHECK_PASS + 1))
 fi
 
 if git ls-tree -r master 2>> "${LOG_FILE}" | grep -q "CMakeLists\.txt$"; then
 	log "✓ CMakeLists.txt files found"
 	CMAKE_FILE_COUNT=$(git ls-tree -r master 2>> "${LOG_FILE}" | grep -c "CMakeLists\.txt$")
-	((FILE_CHECK_PASS++))
+	FILE_CHECK_PASS=$((FILE_CHECK_PASS + 1))
 fi
 
 # Check traceability

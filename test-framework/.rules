@@ -6,32 +6,33 @@ create repository platform-git
 end repository
 
 # Trunk → master branch
-match /trunk
+match /trunk/
 	repository platform-git
 	branch master
 end match
 
-# Feature branches (platform-1000, platform-1001, etc.)
-match /branches/platform-[0-9]+
-	repository platform-git
-	branch refs/heads/branches/\1
-end match
-
-# Support/maintenance branches (platform-bl*)
-match /branches/platform-bl[0-9]+
-	repository platform-git
-	branch refs/heads/branches/\1
-end match
-
-# Tags from support branches only (PLATFORM-BLXXX format)
-# Tags are created as refs/tags branch references
-match /tags/PLATFORM-BL[0-9]+
+# Tags from support branches only (PLATFORM-BLXXX format).
+# Matched before generic branches; written as refs/tags/ so the converter
+# creates real tag refs (names without refs/ get refs/heads/ prepended).
+match /tags/(PLATFORM-BL[0-9]+[^/]*)/
 	repository platform-git
 	branch refs/tags/\1
 end match
 
+# Support/maintenance branches (platform-bl*) — must precede the numeric
+# feature-branch rule so 'bl' names are not left to fall through.
+match /branches/(platform-bl[0-9]+)/
+	repository platform-git
+	branch \1
+end match
+
+# Feature branches (platform-1000, platform-1001, ...)
+match /branches/(platform-[0-9]+)/
+	repository platform-git
+	branch \1
+end match
+
 # Ignore any other paths that don't match above rules
-# This prevents unwanted commits from being migrated
 match /
 	action ignore
 end match
