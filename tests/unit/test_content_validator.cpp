@@ -86,14 +86,13 @@ TEST_CASE("identical inventories and hashes pass", "[content-validator]")
 {
     FakeMigration fake;
     fake.svnListOutput = "README.md\nsrc/\nsrc/main.c\n";
-    fake.gitLsTreeOutput
-        = lsTreeEntry("hash-readme", "README.md") + lsTreeEntry("hash-main", "src/main.c");
+    fake.gitLsTreeOutput = lsTreeEntry("hash-readme", "README.md")
+        + lsTreeEntry("hash-main", "src/main.c");
     fake.svnHashByFile = {{"README.md", "hash-readme"}, {"main.c", "hash-main"}};
 
     ErrorReporter reporter;
     ContentValidator validator("file:///fake", "/fake/git", reporter, fake.runner());
-    const ContentReport report
-        = validator.verify({RefMapping {"trunk", "master"}});
+    const ContentReport report = validator.verify({RefMapping {"trunk", "master"}});
 
     REQUIRE(report.refs.size() == 1);
     CHECK(report.ok);
@@ -130,8 +129,8 @@ TEST_CASE("differing content hashes fail validation", "[content-validator]")
 {
     FakeMigration fake;
     fake.svnListOutput = "README.md\nsrc/\nsrc/main.c\n";
-    fake.gitLsTreeOutput
-        = lsTreeEntry("hash-readme", "README.md") + lsTreeEntry("hash-WRONG", "src/main.c");
+    fake.gitLsTreeOutput = lsTreeEntry("hash-readme", "README.md")
+        + lsTreeEntry("hash-WRONG", "src/main.c");
     fake.svnHashByFile = {{"README.md", "hash-readme"}, {"main.c", "hash-main"}};
 
     ErrorReporter reporter;
@@ -154,8 +153,7 @@ TEST_CASE("a missing git ref is reported as unconverted", "[content-validator]")
 
     ErrorReporter reporter;
     ContentValidator validator("file:///fake", "/fake/git", reporter, fake.runner());
-    const ContentReport report
-        = validator.verify({RefMapping {"branches/lost", "lost"}});
+    const ContentReport report = validator.verify({RefMapping {"branches/lost", "lost"}});
 
     CHECK_FALSE(report.ok);
     REQUIRE(report.refs.size() == 1);
@@ -189,8 +187,8 @@ TEST_CASE("sample limit caps the number of hashed files", "[content-validator]")
 TEST_CASE("standard layout mappings follow the converter convention",
           "[content-validator]")
 {
-    const std::vector<RefMapping> mappings = ContentValidator::standardLayoutMappings(
-        {"trunk", "release-1.0"}, {"v1.0.0"});
+    const std::vector<RefMapping> mappings
+        = ContentValidator::standardLayoutMappings({"trunk", "release-1.0"}, {"v1.0.0"});
 
     REQUIRE(mappings.size() == 3);
     CHECK(mappings[0].svnPath == "trunk");

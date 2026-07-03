@@ -262,20 +262,18 @@ ContentReport ContentValidator::verify(const std::vector<RefMapping>& mappings,
         }
         if (!ref.missingInGit.empty())
             m_reporter.report(ErrorCode::FileMissingInGit,
-                              std::to_string(ref.missingInGit.size())
-                                  + " file(s) of '" + mapping.svnPath
-                                  + "' missing from git ref '" + mapping.gitRef
+                              std::to_string(ref.missingInGit.size()) + " file(s) of '"
+                                  + mapping.svnPath + "' missing from git ref '"
+                                  + mapping.gitRef
                                   + "': " + previewList(ref.missingInGit),
                               m_gitRepoPath);
 
         // 2. Exact content comparison, evenly sampled when capped.
         std::vector<std::string> toHash;
-        if (sampleLimit > 0
-            && present.size() > static_cast<std::size_t>(sampleLimit)) {
+        if (sampleLimit > 0 && present.size() > static_cast<std::size_t>(sampleLimit)) {
             for (long i = 0; i < sampleLimit; ++i)
-                toHash.push_back(
-                    present[static_cast<std::size_t>(i) * present.size()
-                            / static_cast<std::size_t>(sampleLimit)]);
+                toHash.push_back(present[static_cast<std::size_t>(i) * present.size()
+                                         / static_cast<std::size_t>(sampleLimit)]);
         } else {
             toHash = present;
         }

@@ -98,10 +98,11 @@ public:
     /// Branch/tag directories matching no rule land in @p unmapped —
     /// their entire history would be dropped by the converter; paths
     /// matching an explicit ignore rule land in @p ignored.
-    static std::vector<RefMapping>
-    mapWithRules(const RulesValidator& rules, const std::vector<std::string>& branches,
-                 const std::vector<std::string>& tags,
-                 std::vector<std::string>& unmapped, std::vector<std::string>& ignored);
+    static std::vector<RefMapping> mapWithRules(const RulesValidator& rules,
+                                                const std::vector<std::string>& branches,
+                                                const std::vector<std::string>& tags,
+                                                std::vector<std::string>& unmapped,
+                                                std::vector<std::string>& ignored);
 
 private:
     /// Files (not directories) at the HEAD of @p svnPath, sorted.

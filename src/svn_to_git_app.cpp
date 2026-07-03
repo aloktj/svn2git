@@ -568,9 +568,8 @@ int main(int argc, char** argv)
                     const auto it = tagCommits.find(svnPath.substr(5));
                     return it != tagCommits.end() ? it->second : 0;
                 }
-                const std::string name = svnPath.rfind("branches/", 0) == 0
-                    ? svnPath.substr(9)
-                    : svnPath;
+                const std::string name
+                    = svnPath.rfind("branches/", 0) == 0 ? svnPath.substr(9) : svnPath;
                 const auto it = branchCommits.find(name);
                 return it != branchCommits.end() ? it->second : 0;
             };
@@ -578,15 +577,14 @@ int main(int argc, char** argv)
             std::vector<std::string> unmapped;
             std::vector<std::string> ignored;
             const std::vector<svn2git::RefMapping> mappings
-                = svn2git::ContentValidator::mapWithRules(rules, branches, tags,
-                                                          unmapped, ignored);
+                = svn2git::ContentValidator::mapWithRules(rules, branches, tags, unmapped,
+                                                          ignored);
 
             std::cout << "RULES COVERAGE — " << branches.size() << " branch(es), "
                       << tags.size() << " tag(s) found in the repository:\n";
             for (const svn2git::RefMapping& mapping : mappings)
-                std::cout << "  /" << mapping.svnPath << "/ -> branch '"
-                          << mapping.gitRef << "' (" << commitsFor(mapping.svnPath)
-                          << " commit(s))\n";
+                std::cout << "  /" << mapping.svnPath << "/ -> branch '" << mapping.gitRef
+                          << "' (" << commitsFor(mapping.svnPath) << " commit(s))\n";
             for (const std::string& path : ignored)
                 std::cout << "  /" << path << "/ -> IGNORED by an explicit rule\n";
             for (const std::string& path : unmapped) {
@@ -685,12 +683,11 @@ int main(int argc, char** argv)
             reportFile.flush();
             if (!reportFile.good())
                 reporter.report(svn2git::ErrorCode::FileAccessError,
-                                "cannot write content validation report",
-                                reportFileName);
+                                "cannot write content validation report", reportFileName);
 
             audit.logEvent("Validation",
-                           "content verification over "
-                               + std::to_string(mappings.size()) + " ref(s)",
+                           "content verification over " + std::to_string(mappings.size())
+                               + " ref(s)",
                            contentReport.ok ? "OK" : "FAILED");
             if (!contentReport.ok)
                 success = false;

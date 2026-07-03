@@ -22,9 +22,9 @@ using svn2git::ContentValidator;
 using svn2git::ErrorCode;
 using svn2git::ErrorReporter;
 using svn2git::RefMapping;
-using testhelpers::TempDir;
 using testhelpers::createTestSvnRepo;
 using testhelpers::gitIn;
+using testhelpers::TempDir;
 
 namespace {
 
@@ -40,8 +40,8 @@ void createFaithfulMirror(const std::string& repoPath)
     gitIn(repoPath, "config user.name 'John Smith'");
     gitIn(repoPath, "config user.email john.smith@example.com");
 
-    svn2git::CommandRunner::run(
-        "mkdir -p " + svn2git::CommandRunner::shellQuote(repoPath + "/src"));
+    svn2git::CommandRunner::run("mkdir -p "
+                                + svn2git::CommandRunner::shellQuote(repoPath + "/src"));
     svn2git::CommandRunner::run(
         "printf '# Test Project\\n' > "
         + svn2git::CommandRunner::shellQuote(repoPath + "/README.md"));
