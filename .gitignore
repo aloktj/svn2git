@@ -13,3 +13,4 @@ svn2git.log
 svn_to_git_mapping.json
 traceability.db
 authors-generated.txt
+.qmake.stash
