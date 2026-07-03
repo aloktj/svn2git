@@ -1,5 +1,5 @@
 #!/bin/bash
-# Setup SVN Repository with 10,000+ revisions and 200 branches
+# Setup SVN Repository with 10,000+ revisions and 61 branches (51 feature + 10 support)
 
 set -e
 
@@ -157,7 +157,7 @@ log "✓ Created ${NUM_SUPPORT_BRANCHES} support branches"
 log "Generating ${FEATURE_BRANCHES_COMMITS} commits across feature branches..."
 FEATURE_COMMIT_COUNT=0
 
-for ((i = 1; i <= FEATURE_COMMITS; i++)); do
+for ((i = 1; i <= FEATURE_BRANCHES_COMMITS; i++)); do
 	# Pick a random feature branch
 	BRANCH_INDEX=$((RANDOM % NUM_REGULAR_BRANCHES))
 	BRANCH_NAME="platform-$((1000 + BRANCH_INDEX))"
@@ -185,8 +185,8 @@ for ((i = 1; i <= FEATURE_COMMITS; i++)); do
 	((FEATURE_COMMIT_COUNT++))
 
 	if [ $((i % 500)) -eq 0 ]; then
-		PROGRESS=$((i * 100 / FEATURE_COMMITS))
-		log "  Feature branch commits: ${PROGRESS}% (${i}/${FEATURE_COMMITS})"
+		PROGRESS=$((i * 100 / FEATURE_BRANCHES_COMMITS))
+		log "  Feature branch commits: ${PROGRESS}% (${i}/${FEATURE_BRANCHES_COMMITS})"
 	fi
 done
 log "✓ Generated ${FEATURE_COMMIT_COUNT} commits on feature branches"

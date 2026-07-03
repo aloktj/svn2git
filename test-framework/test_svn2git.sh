@@ -170,10 +170,11 @@ check_prerequisites() {
 		exit 1
 	fi
 
-	# Check disk space
+	# Check disk space (df returns 1K blocks by default, convert to MB)
 	print_progress "Checking disk space..."
-	AVAILABLE_SPACE=$(df "${SVN_ROOT_DIR%/*}" 2>/dev/null | awk 'NR==2 {print $4}')
-	if [ -z "${AVAILABLE_SPACE}" ]; then
+	AVAILABLE_SPACE_KB=$(df "${SVN_ROOT_DIR%/*}" 2>/dev/null | awk 'NR==2 {print $4}')
+	AVAILABLE_SPACE=$((AVAILABLE_SPACE_KB / 1024))
+	if [ -z "${AVAILABLE_SPACE_KB}" ]; then
 		print_warning "Could not determine available disk space"
 	elif [ "${AVAILABLE_SPACE}" -lt "${REQUIRED_DISK_SPACE}" ]; then
 		print_error "Insufficient disk space. Required: ${REQUIRED_DISK_SPACE}MB, Available: ${AVAILABLE_SPACE}MB"

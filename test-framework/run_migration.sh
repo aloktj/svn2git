@@ -52,7 +52,7 @@ if [ -z "${SVN2GIT_BINARY}" ] || [ ! -x "${SVN2GIT_BINARY}" ]; then
 	log "svn2git binary not found in PATH, attempting to build..."
 
 	# Try to build svn2git from source
-	PROJECT_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
+	PROJECT_ROOT=$(cd "${SCRIPT_DIR}/.." && pwd)
 	if [ -d "${PROJECT_ROOT}" ] && [ -f "${PROJECT_ROOT}/CMakeLists.txt" ]; then
 		log "Building svn2git from source..."
 		BUILD_DIR="${PROJECT_ROOT}/build_test"
@@ -105,18 +105,16 @@ log "✓ Rules file validated"
 log "Running svn2git migration..."
 MIGRATION_START=$(date +%s)
 
-# Build svn2git command
-SVN2GIT_CMD="${SVN2GIT_BINARY}"
-SVN2GIT_CMD="${SVN2GIT_CMD} file://${SVN_REPO_PATH}"
-SVN2GIT_CMD="${SVN2GIT_CMD} -o ${GIT_REPO_PATH}"
-SVN2GIT_CMD="${SVN2GIT_CMD} -r ${SCRIPT_DIR}/${RULES_FILE}"
-SVN2GIT_CMD="${SVN2GIT_CMD} -A ${SCRIPT_DIR}/${AUTHORS_FILE}"
-SVN2GIT_CMD="${SVN2GIT_CMD} --generate-traceability-map"
-SVN2GIT_CMD="${SVN2GIT_CMD} --operator testengr"
+log "Command: ${SVN2GIT_BINARY} file://${SVN_REPO_PATH} -o ${GIT_REPO_PATH} -r ${SCRIPT_DIR}/${RULES_FILE} -A ${SCRIPT_DIR}/${AUTHORS_FILE} --generate-traceability-map --operator testengr"
 
-log "Command: ${SVN2GIT_CMD}"
-
-if eval "${SVN2GIT_CMD}" >> "${LOG_FILE}" 2>&1; then
+if "${SVN2GIT_BINARY}" \
+	"file://${SVN_REPO_PATH}" \
+	-o "${GIT_REPO_PATH}" \
+	-r "${SCRIPT_DIR}/${RULES_FILE}" \
+	-A "${SCRIPT_DIR}/${AUTHORS_FILE}" \
+	--generate-traceability-map \
+	--operator testengr \
+	>> "${LOG_FILE}" 2>&1; then
 	MIGRATION_END=$(date +%s)
 	MIGRATION_DURATION=$((MIGRATION_END - MIGRATION_START))
 	log "✓ Migration completed successfully (${MIGRATION_DURATION}s)"
