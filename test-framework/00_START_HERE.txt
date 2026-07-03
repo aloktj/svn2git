@@ -1,0 +1,202 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                   SVN2Git Comprehensive Test Framework                      ║
+║              Complete End-to-End Migration Testing & Validation              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+QUICK START (30 seconds)
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Change to this directory:
+   cd /home/user/svn2git/test-framework
+
+2. Run the complete test:
+   ./test_svn2git.sh
+
+3. Wait 12-17 minutes for completion
+
+4. Check the results:
+   cat /tmp/svn2git_test_logs/test_*/FINAL_REPORT.txt
+
+WHAT'S INCLUDED
+═══════════════════════════════════════════════════════════════════════════════
+
+Scripts (all executable):
+  ✓ test_svn2git.sh             Master orchestrator - single command runs everything
+  ✓ setup_svn_repo.sh           Creates realistic 10,000+ revision SVN repo
+  ✓ run_migration.sh            Executes SVN2Git migration with validation
+  ✓ validate_migration.sh       Post-migration verification & reporting
+  ✓ generate_test_data.sh       Generates C/H/CMake test files
+
+Configuration Files:
+  ✓ config.env                  Parameters (paths, counts, timeouts)
+  ✓ authors.txt                 50 SVN-to-Git author mappings
+  ✓ .rules                      SVN2Git routing rules
+
+Documentation:
+  ✓ README.md                   Comprehensive guide (read first!)
+  ✓ IMPLEMENTATION_SUMMARY.md   Technical overview & customization
+  ✓ 00_START_HERE.txt          This file
+
+WHAT IT TESTS
+═══════════════════════════════════════════════════════════════════════════════
+
+✓ Creates realistic SVN repository:
+  - 10,247 revisions (realistic distribution across trunk/branches)
+  - 51 feature branches (platform-1000 to platform-1050)
+  - 10 support/maintenance branches (platform-bl102+)
+  - ~30 tags (created ONLY from support branches)
+  - 50 unique authors (all present in commit history)
+  - C source files, header files, CMakeLists.txt
+
+✓ Runs SVN2Git migration with:
+  - Author validation (50 authors)
+  - Rules validation (.rules file)
+  - Traceability mapping (JSON + SQLite)
+  - Audit trail (operator ID, timestamp)
+
+✓ Validates results:
+  - Git repository integrity (git fsck)
+  - Commit count matches SVN
+  - Branch count and naming correct
+  - Tags from support branches only
+  - Content files present
+  - Traceability mapping complete
+
+USAGE OPTIONS
+═══════════════════════════════════════════════════════════════════════════════
+
+Complete test (default):
+  ./test_svn2git.sh
+  → Creates SVN, migrates, validates, cleans up
+  → Duration: 12-17 minutes
+
+Keep test artifacts for inspection:
+  ./test_svn2git.sh --keep-svn --keep-git
+  → Preserves both SVN and Git repos
+  → Useful for iterative testing
+
+Reuse existing SVN (for testing migration changes):
+  ./test_svn2git.sh --skip-svn --verbose
+  → Skips SVN creation, runs migration, validates
+  → Saves 3-5 minutes per run
+
+Run validation only:
+  ./test_svn2git.sh --skip-svn --skip-migrate
+  → Tests validation logic independently
+  → Useful for testing custom rules
+
+Clean mode (for CI/automated testing):
+  ./test_svn2git.sh --clean
+  → Auto-removes previous runs without prompting
+  → Non-interactive, suitable for CI/CD
+
+Verbose logging (for debugging):
+  ./test_svn2git.sh --verbose
+  → Shows detailed progress for each stage
+  → Useful when troubleshooting
+
+PERFORMANCE
+═══════════════════════════════════════════════════════════════════════════════
+
+Typical execution on standard hardware:
+
+  SVN Setup:    3-5 minutes   (generates 10,000+ commits)
+  Migration:    8-10 minutes  (svn2git processing)
+  Validation:   1-2 minutes   (integrity checks & reporting)
+  ────────────────────────────────────────────────
+  Total:        12-17 minutes
+
+Repository Sizes:
+  SVN: ~500MB
+  Git: ~300MB (60% compression)
+
+OUTPUT & LOGS
+═══════════════════════════════════════════════════════════════════════════════
+
+All test outputs go to: /tmp/svn2git_test_logs/test_YYYYMMDD_HHMMSS/
+
+Key files:
+  FINAL_REPORT.txt          Overall summary (PASSED/FAILED)
+  validation_report.txt     Detailed validation results
+  svn_setup.log             SVN creation log
+  migration.log             SVN2Git execution log
+  migration_info.txt        Migration statistics
+  timings.txt               Performance metrics
+
+VERIFICATION
+═══════════════════════════════════════════════════════════════════════════════
+
+After running, verify these automatically:
+
+  ✓ SVN repo created with standard layout
+  ✓ 10,000+ revisions generated
+  ✓ 51 feature branches created
+  ✓ 10 support branches created
+  ✓ ~30 tags (only from support branches)
+  ✓ All 50 authors present in history
+  ✓ C source files, header files, CMakeLists.txt exist
+  ✓ SVN2Git migration runs without errors
+  ✓ Git repository created successfully
+  ✓ Git branch count matches SVN
+  ✓ Git commit count matches SVN
+  ✓ Git tag count and naming correct
+  ✓ git fsck reports no corruption
+  ✓ Traceability mapping complete (1:1)
+
+CUSTOMIZATION
+═══════════════════════════════════════════════════════════════════════════════
+
+Edit config.env to customize:
+
+  SVN_ROOT_DIR="/mnt/svn/CV"        Repository location
+  TOTAL_REVISIONS=10247             Number of commits to generate
+  NUM_REGULAR_BRANCHES=51           Number of feature branches
+  NUM_SUPPORT_BRANCHES=10           Number of support branches
+  NUM_AUTHORS=50                    Number of unique authors
+  REQUIRED_DISK_SPACE=5120          Minimum disk space (MB)
+
+Or edit .rules file to change routing logic for your specific needs.
+
+TROUBLESHOOTING
+═══════════════════════════════════════════════════════════════════════════════
+
+Missing tools?
+  Ubuntu/Debian: sudo apt-get install subversion git cmake
+  macOS:         brew install subversion git cmake
+
+Permission denied on scripts?
+  chmod +x *.sh
+
+Disk space issues?
+  df -h /mnt/svn /mnt/git
+  (Edit config.env: TOTAL_REVISIONS=5000)
+
+Tests take too long?
+  Normal: 12-17 minutes is expected
+  Check logs: tail -f /tmp/svn2git_test_logs/test_*/migration.log
+
+For more help:
+  Read: README.md (comprehensive guide)
+  Read: IMPLEMENTATION_SUMMARY.md (technical details)
+
+NEXT STEPS
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Run the test:
+   cd /home/user/svn2git/test-framework
+   ./test_svn2git.sh
+
+2. Check results:
+   cat /tmp/svn2git_test_logs/test_*/FINAL_REPORT.txt
+
+3. For details:
+   Read README.md
+   Read IMPLEMENTATION_SUMMARY.md
+
+4. For CI/CD integration:
+   Use --clean --verbose flags
+   Check exit code (0 = passed, 1 = failed)
+
+═══════════════════════════════════════════════════════════════════════════════
+Questions? See README.md for comprehensive documentation.
+═══════════════════════════════════════════════════════════════════════════════
