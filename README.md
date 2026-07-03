@@ -39,6 +39,7 @@ Usage: `svn2git-validate [options] <svn-repository-url>`
 | `--validate-rules-coverage` | check the rules file covers trunk + every real branch and tag in the repository — anything unmapped would be silently dropped by the converter |
 | `--verify-content` | compare file contents of the converted `--git-repo` against the SVN source, ref by ref (complete inventory + content-hash comparison) — catches cheap-copy data loss that structural checks miss |
 | `--content-samples <n>` | cap content-hash checks per ref for huge repositories (default 0 = hash every file) |
+| `--target-repository <name>` | with multi-repository rules files: which rules repository the `--git-repo` being verified holds |
 | `--debug-rules` | interactive rule debugger: type SVN paths, see which rule matches |
 | `--debug` | verbose (debug-level) logging |
 | `--authors <file>` | authors mapping file (default `authors.txt`) |

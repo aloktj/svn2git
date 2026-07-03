@@ -39,6 +39,10 @@ namespace svn2git {
 struct RefMapping {
     std::string svnPath; ///< e.g. "trunk", "branches/release-1.0"
     std::string gitRef; ///< e.g. "master", "release-1.0", "tags/v1.0.0"
+    std::string repository {}; ///< target repository from the rules ("" when
+                               ///< derived from the standard layout)
+    std::string pathPrefix {}; ///< prefix the converter prepends inside the
+                               ///< branch (from the rule's `prefix`), "" = none
 };
 
 /// Per-ref outcome of the content comparison.
@@ -79,6 +83,12 @@ public:
     ContentValidator(std::string svnRepoUrl, std::string gitRepoPath,
                      ErrorReporter& reporter, Runner runner = &CommandRunner::run);
 
+    /// Removes the scratch file created for `svn cat` transfers.
+    ~ContentValidator();
+
+    ContentValidator(const ContentValidator&) = delete;
+    ContentValidator& operator=(const ContentValidator&) = delete;
+
     /// Compare every mapping. The file inventory comparison is always
     /// complete; @p sampleLimit caps the number of per-ref content-hash
     /// checks (0 = hash every file), spread evenly across the inventory
@@ -95,9 +105,13 @@ public:
 
     /// Mappings derived from a parsed rules file (first match wins,
     /// backreferences expanded — see RulesValidator::resolveTarget).
-    /// Branch/tag directories matching no rule land in @p unmapped —
-    /// their entire history would be dropped by the converter; paths
-    /// matching an explicit ignore rule land in @p ignored.
+    /// Each mapping carries the rule's target repository and path
+    /// prefix; a multi-repository rules file therefore yields mappings
+    /// for several repositories, which callers must filter to the one
+    /// being validated. Branch/tag directories matching no rule land in
+    /// @p unmapped — their entire history would be dropped by the
+    /// converter; paths matching an explicit ignore rule land in
+    /// @p ignored.
     static std::vector<RefMapping> mapWithRules(const RulesValidator& rules,
                                                 const std::vector<std::string>& branches,
                                                 const std::vector<std::string>& tags,
@@ -121,7 +135,8 @@ private:
 
     std::string m_svnRepoUrl;
     std::string m_gitRepoPath;
-    std::string m_scratchFile; ///< reused temp file for svn cat output
+    std::string m_scratchFile; ///< mkstemp-created private temp file for
+                               ///< svn cat output ("" when creation failed)
     ErrorReporter& m_reporter;
     Runner m_runner;
 };

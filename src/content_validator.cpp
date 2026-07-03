@@ -11,7 +11,8 @@
 
 #include "svn2git/logging.h"
 
-#include <unistd.h> // getpid
+#include <stdlib.h> // mkstemp
+#include <unistd.h> // close
 
 #include <algorithm>
 #include <cctype>
@@ -77,16 +78,39 @@ std::string ContentReport::toText() const
     return out.str();
 }
 
+namespace {
+
+/// Securely create a private scratch file (mkstemp: unique name, opened
+/// with O_EXCL so a pre-planted symlink at a predictable path cannot
+/// redirect writes). Returns "" when creation fails; callers treat that
+/// as a tool failure at use time.
+std::string createScratchFile()
+{
+    std::string templatePath
+        = (std::filesystem::temp_directory_path() / "svn2git-content-XXXXXX").string();
+    const int fd = mkstemp(templatePath.data());
+    if (fd < 0)
+        return std::string();
+    close(fd);
+    return templatePath;
+}
+
+} // namespace
+
 ContentValidator::ContentValidator(std::string svnRepoUrl, std::string gitRepoPath,
                                    ErrorReporter& reporter, Runner runner)
     : m_svnRepoUrl(std::move(svnRepoUrl))
     , m_gitRepoPath(std::move(gitRepoPath))
-    , m_scratchFile((std::filesystem::temp_directory_path()
-                     / ("svn2git-content-" + std::to_string(getpid()) + ".tmp"))
-                        .string())
+    , m_scratchFile(createScratchFile())
     , m_reporter(reporter)
     , m_runner(std::move(runner))
 {
+}
+
+ContentValidator::~ContentValidator()
+{
+    if (!m_scratchFile.empty())
+        std::remove(m_scratchFile.c_str());
 }
 
 std::vector<RefMapping>
@@ -117,9 +141,10 @@ std::vector<RefMapping> ContentValidator::mapWithRules(
         const std::string anchored = "/" + svnPath + "/";
         std::string repository;
         std::string branch;
-        switch (rules.resolveTarget(anchored, repository, branch)) {
+        std::string prefix;
+        switch (rules.resolveTarget(anchored, repository, branch, &prefix)) {
         case RulesValidator::Resolution::Mapped:
-            mappings.push_back(RefMapping {svnPath, branch});
+            mappings.push_back(RefMapping {svnPath, branch, repository, prefix});
             break;
         case RulesValidator::Resolution::Ignored:
             ignored.push_back(svnPath);
@@ -195,6 +220,8 @@ std::string ContentValidator::svnContentHash(const std::string& svnPath,
     // Two steps via a scratch file instead of a pipe: with a pipe the
     // exit status of `svn cat` is lost and a partial download would be
     // hashed silently, turning a transport error into a bogus mismatch.
+    if (m_scratchFile.empty())
+        return std::string(); // mkstemp failed at construction
     const std::string url = m_svnRepoUrl + "/" + svnPath + "/" + file;
     const CommandResult fetch
         = m_runner("svn cat --non-interactive " + CommandRunner::shellQuote(url) + " > "
@@ -220,11 +247,25 @@ ContentReport ContentValidator::verify(const std::vector<RefMapping>& mappings,
     ContentReport report;
     report.ok = true;
 
+    // A broken --git-repo path must surface as a tool/configuration
+    // error, never as "branches missing from the conversion".
+    if (!m_runner("git -C " + CommandRunner::shellQuote(m_gitRepoPath)
+                  + " rev-parse --git-dir")
+             .ok()) {
+        m_reporter.report(ErrorCode::ExternalToolError,
+                          "'" + m_gitRepoPath
+                              + "' is not a usable git repository — nothing verified",
+                          m_gitRepoPath);
+        report.ok = false;
+        return report;
+    }
+
     for (const RefMapping& mapping : mappings) {
         RefContentResult ref;
         ref.svnPath = mapping.svnPath;
         ref.gitRef = mapping.gitRef;
 
+        // SVN-side inventory: every file at the HEAD of this branch/tag.
         std::vector<std::string> svnFiles;
         if (!listSvnFiles(mapping.svnPath, svnFiles)) {
             ref.toolFailures.push_back("svn list failed for '" + mapping.svnPath + "'");
@@ -238,24 +279,43 @@ ContentReport ContentValidator::verify(const std::vector<RefMapping>& mappings,
         }
         ref.filesInSvn = static_cast<long>(svnFiles.size());
 
+        // Git-side inventory. An ls-tree failure is only a missing ref
+        // when the ref genuinely does not resolve; any other failure
+        // (permissions, truncation, git error) is a tool failure.
         std::vector<std::pair<std::string, std::string>> gitBlobs;
         if (!listGitBlobs(mapping.gitRef, gitBlobs)) {
-            ref.refMissing = true;
-            m_reporter.report(ErrorCode::FileMissingInGit,
-                              "branch/tag '" + mapping.svnPath
-                                  + "' has no corresponding git ref '" + mapping.gitRef
-                                  + "' in the converted repository",
-                              m_gitRepoPath);
+            const bool refExists
+                = m_runner("git -C " + CommandRunner::shellQuote(m_gitRepoPath)
+                           + " rev-parse --verify --quiet "
+                           + CommandRunner::shellQuote(mapping.gitRef + "^{commit}"))
+                      .ok();
+            if (refExists) {
+                ref.toolFailures.push_back("git ls-tree failed for ref '" + mapping.gitRef
+                                           + "'");
+                m_reporter.report(ErrorCode::ExternalToolError,
+                                  "git ls-tree failed for existing ref '" + mapping.gitRef
+                                      + "'",
+                                  m_gitRepoPath);
+            } else {
+                ref.refMissing = true;
+                m_reporter.report(ErrorCode::FileMissingInGit,
+                                  "branch/tag '" + mapping.svnPath
+                                      + "' has no corresponding git ref '"
+                                      + mapping.gitRef + "' in the converted repository",
+                                  m_gitRepoPath);
+            }
             report.refs.push_back(std::move(ref));
             report.ok = false;
             continue;
         }
         std::map<std::string, std::string> blobByPath(gitBlobs.begin(), gitBlobs.end());
 
-        // 1. Complete inventory comparison — every SVN file must exist.
+        // 1. Complete inventory comparison — every SVN file must exist
+        //    in the git tree, relocated under the rule's prefix when the
+        //    conversion used one.
         std::vector<std::string> present;
         for (const std::string& file : svnFiles) {
-            if (blobByPath.count(file) != 0)
+            if (blobByPath.count(mapping.pathPrefix + file) != 0)
                 present.push_back(file);
             else
                 ref.missingInGit.push_back(file);
@@ -268,7 +328,9 @@ ContentReport ContentValidator::verify(const std::vector<RefMapping>& mappings,
                                   + "': " + previewList(ref.missingInGit),
                               m_gitRepoPath);
 
-        // 2. Exact content comparison, evenly sampled when capped.
+        // 2. Exact content comparison: the git blob hash of the SVN file
+        //    content must equal the blob ID in the git tree. Evenly
+        //    sampled when capped so a bounded run still spans the tree.
         std::vector<std::string> toHash;
         if (sampleLimit > 0 && present.size() > static_cast<std::size_t>(sampleLimit)) {
             for (long i = 0; i < sampleLimit; ++i)
@@ -289,7 +351,7 @@ ContentReport ContentValidator::verify(const std::vector<RefMapping>& mappings,
                 continue;
             }
             ++ref.filesHashed;
-            if (svnHash != blobByPath[file])
+            if (svnHash != blobByPath[mapping.pathPrefix + file])
                 ref.contentMismatches.push_back(file);
         }
         if (!ref.contentMismatches.empty())
@@ -308,7 +370,6 @@ ContentReport ContentValidator::verify(const std::vector<RefMapping>& mappings,
         report.refs.push_back(std::move(ref));
     }
 
-    std::remove(m_scratchFile.c_str());
     log->info("content validation {}", report.ok ? "PASSED" : "FAILED");
     return report;
 }

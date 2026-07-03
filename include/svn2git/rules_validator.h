@@ -95,14 +95,18 @@ public:
 
     /// Resolve @p path (e.g. "/branches/release-1.0/") through the rules
     /// exactly like the converter: first match wins, and backreferences
-    /// (\1…\9) in the rule's repository/branch fields are expanded from
-    /// the pattern's capture groups. A rule without an explicit branch
-    /// maps to "master" (the converter's default). Requires validate()
+    /// (\1…\9) in the rule's repository/branch/prefix fields are expanded
+    /// from the pattern's capture groups. A rule without an explicit
+    /// branch maps to "master" (the converter's default). Resolution
+    /// targets the HEAD state: rules expired via 'max revision' are only
+    /// used when no unbounded rule matches the path. Requires validate()
     /// or dryRun() to have parsed the file first.
     /// @param[out] repository  expanded target repository (Mapped only)
     /// @param[out] branch      expanded target branch (Mapped only)
+    /// @param[out] prefix      expanded path prefix the converter would
+    ///                         prepend inside the branch (optional)
     Resolution resolveTarget(const std::string& path, std::string& repository,
-                             std::string& branch) const;
+                             std::string& branch, std::string* prefix = nullptr) const;
 
     /// Rules parsed by the last validate()/dryRun() call.
     const std::vector<MatchRule>& matchRules() const { return m_matchRules; }
