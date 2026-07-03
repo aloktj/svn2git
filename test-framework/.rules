@@ -24,10 +24,10 @@ match /branches/platform-bl[0-9]+
 end match
 
 # Tags from support branches only (PLATFORM-BLXXX format)
-# Tags are created from commits on support branches
+# Tags are created as refs/tags branch references
 match /tags/PLATFORM-BL[0-9]+
 	repository platform-git
-	tag \1
+	branch refs/tags/\1
 end match
 
 # Ignore any other paths that don't match above rules
