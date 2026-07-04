@@ -29,6 +29,18 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
+Two additional one-shot suites live in `tests/`:
+```
+tests/smoke_test.sh       # end-to-end run of every CLI command against a
+                          # locally created SVN repo + git mirrors
+tests/valgrind_suite.sh   # the unit/integration binaries and the full CLI
+                          # surface under valgrind memcheck; fails on any
+                          # error or definite/indirect leak (--quick = unit
+                          # tests only; expect ~10-30x slower than native,
+                          # the whole suite finishes in a few minutes)
+```
+`ctest --test-dir build -T memcheck` also works for plain CTest users.
+
 Usage: `svn2git-validate [options] <svn-repository-url>`
 
 | Flag | Effect |

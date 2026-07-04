@@ -14,8 +14,15 @@
 #
 # Usage:  tests/smoke_test.sh [path-to-svn2git-validate]
 #         (default binary: <repo>/build/svn2git-validate)
+#
+# SVN2GIT_TEST_WRAPPER, when set, is prefixed (word-split) to every binary
+# invocation — e.g. SVN2GIT_TEST_WRAPPER="valgrind --error-exitcode=99"
+# runs the whole suite under memcheck. Exit-code assertions still hold
+# because valgrind forwards the program's exit code unless it finds errors.
 
 set -u
+
+WRAPPER="${SVN2GIT_TEST_WRAPPER:-}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN="${1:-$SCRIPT_DIR/../build/svn2git-validate}"
@@ -206,48 +213,48 @@ printf 'migration:\n\tname: broken by a tab\n' >"$CFG/orchestration-bad.yaml"
 echo "== 4. Exercising every command"
 
 # --- usage / help ---------------------------------------------------------
-run help 0                 "$BIN" --help
-run missing-svn-url 2      "$BIN" --dry-run
-run unknown-option 2       "$BIN" --frobnicate "$URL"
-run bad-content-samples 2  "$BIN" --verify-content --content-samples 10abc --git-repo "$MIRROR" "$URL"
+run help 0                 $WRAPPER "$BIN" --help
+run missing-svn-url 2      $WRAPPER "$BIN" --dry-run
+run unknown-option 2       $WRAPPER "$BIN" --frobnicate "$URL"
+run bad-content-samples 2  $WRAPPER "$BIN" --verify-content --content-samples 10abc --git-repo "$MIRROR" "$URL"
 
 # --- pre-flight configuration (--dry-run, --orchestration) ----------------
-run dry-run-all-configs 0  "$BIN" --dry-run --authors "$CFG/authors.txt" \
+run dry-run-all-configs 0  $WRAPPER "$BIN" --dry-run --authors "$CFG/authors.txt" \
                                --rules "$CFG/full.rules" \
                                --orchestration "$CFG/orchestration.yaml" "$URL"
-run dry-run-bad-yaml 1     "$BIN" --dry-run --authors "$CFG/authors.txt" \
+run dry-run-bad-yaml 1     $WRAPPER "$BIN" --dry-run --authors "$CFG/authors.txt" \
                                --rules "$CFG/full.rules" \
                                --orchestration "$CFG/orchestration-bad.yaml" "$URL"
 
 # --- authors ---------------------------------------------------------------
-run authors-covered 0      "$BIN" --validate-authors-only --authors "$CFG/authors.txt" "$URL"
-run authors-uncovered 1    "$BIN" --validate-authors-only --authors "$CFG/authors-empty.txt" "$URL"
-run auto-map-authors 0     "$BIN" --auto-map-authors --authors "$CFG/authors-empty.txt" "$URL"
+run authors-covered 0      $WRAPPER "$BIN" --validate-authors-only --authors "$CFG/authors.txt" "$URL"
+run authors-uncovered 1    $WRAPPER "$BIN" --validate-authors-only --authors "$CFG/authors-empty.txt" "$URL"
+run auto-map-authors 0     $WRAPPER "$BIN" --auto-map-authors --authors "$CFG/authors-empty.txt" "$URL"
 expect_file "$LAST_DIR/authors-generated.txt"
 
 # --- rules coverage (pre-migration cheap-copy protection) ------------------
-run rules-coverage-full 0  "$BIN" --validate-rules-coverage --rules "$CFG/full.rules" "$URL"
-run rules-coverage-gap 1   "$BIN" --validate-rules-coverage --rules "$CFG/trunk-only.rules" "$URL"
+run rules-coverage-full 0  $WRAPPER "$BIN" --validate-rules-coverage --rules "$CFG/full.rules" "$URL"
+run rules-coverage-gap 1   $WRAPPER "$BIN" --validate-rules-coverage --rules "$CFG/trunk-only.rules" "$URL"
 expect_in_output "release-1.0"
 
 # --- interactive rule debugger ---------------------------------------------
-run debug-rules 0          bash -c "printf '/trunk/\n\n' | '$BIN' --debug-rules --rules '$CFG/full.rules'"
+run debug-rules 0          bash -c "printf '/trunk/\n\n' | $WRAPPER '$BIN' --debug-rules --rules '$CFG/full.rules'"
 expect_in_output "myproject"
 
 # --- post-migration content verification -----------------------------------
-run verify-standard-layout 0   "$BIN" --verify-content --git-repo "$MIRROR" "$URL"
+run verify-standard-layout 0   $WRAPPER "$BIN" --verify-content --git-repo "$MIRROR" "$URL"
 expect_file "$LAST_DIR/content_validation_report.txt"
-run verify-with-rules 0        "$BIN" --verify-content --rules "$CFG/full.rules" --git-repo "$MIRROR" "$URL"
-run verify-sampled 0           "$BIN" --verify-content --content-samples 1 --git-repo "$MIRROR" "$URL"
-run verify-detects-loss 1      "$BIN" --verify-content --git-repo "$LOSSY" "$URL"
+run verify-with-rules 0        $WRAPPER "$BIN" --verify-content --rules "$CFG/full.rules" --git-repo "$MIRROR" "$URL"
+run verify-sampled 0           $WRAPPER "$BIN" --verify-content --content-samples 1 --git-repo "$MIRROR" "$URL"
+run verify-detects-loss 1      $WRAPPER "$BIN" --verify-content --git-repo "$LOSSY" "$URL"
 expect_in_output "missing in git"
 expect_in_output "manual.txt"
-run verify-detects-tamper 1    "$BIN" --verify-content --git-repo "$TAMPERED" "$URL"
+run verify-detects-tamper 1    $WRAPPER "$BIN" --verify-content --git-repo "$TAMPERED" "$URL"
 expect_in_output "content mismatch"
 expect_in_output "main.c"
 
 # --- traceability artifacts -------------------------------------------------
-run traceability 0         "$BIN" --generate-traceability-map --git-repo "$MIRROR" "$URL"
+run traceability 0         $WRAPPER "$BIN" --generate-traceability-map --git-repo "$MIRROR" "$URL"
 expect_file "$LAST_DIR/svn_to_git_mapping.json"
 expect_file "$LAST_DIR/traceability.db"
 expect_file "$LAST_DIR/audit.log"
