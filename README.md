@@ -34,10 +34,11 @@ Two additional one-shot suites live in `tests/`:
 tests/smoke_test.sh       # end-to-end run of every CLI command against a
                           # locally created SVN repo + git mirrors
 tests/valgrind_suite.sh   # the unit/integration binaries and the full CLI
-                          # surface under valgrind memcheck; fails on any
-                          # error or definite/indirect leak (--quick = unit
-                          # tests only; expect ~10-30x slower than native,
-                          # the whole suite finishes in a few minutes)
+                          # surface under valgrind memcheck; zero-tolerance
+                          # gate — fails unless every process exits with
+                          # zero bytes on the heap (--quick = unit tests
+                          # only; expect ~10-30x slower than native, the
+                          # whole suite finishes in a few minutes)
 ```
 `ctest --test-dir build -T memcheck` also works for plain CTest users.
 

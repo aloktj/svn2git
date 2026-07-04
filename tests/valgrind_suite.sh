@@ -11,8 +11,10 @@
 #                                 never reach)
 #
 # Child processes (svn, git) are deliberately NOT traced — only our own
-# binaries are audited. The suite fails on any memcheck error or any
-# definite/indirect leak.
+# binaries are audited. Zero-tolerance gate: the suite fails unless every
+# audited process exits with ZERO bytes on the heap ("All heap blocks
+# were freed") — definite, indirect, possible and still-reachable blocks
+# all count as failures.
 #
 # Usage:  tests/valgrind_suite.sh [--quick] [build-dir]
 #           --quick     run only leg 1 (fast local iteration)
@@ -35,10 +37,11 @@ BUILD="$(cd "$BUILD" 2>/dev/null && pwd)" || { echo "error: build dir not found"
 
 command -v valgrind >/dev/null || { echo "error: valgrind not installed" >&2; exit 2; }
 
-# --errors-for-leak-kinds makes definite/indirect leaks count as errors,
-# so --error-exitcode=99 turns any of them into a failing exit code.
-VG_OPTS="--leak-check=full --show-leak-kinds=definite,indirect \
---errors-for-leak-kinds=definite,indirect --error-exitcode=99 \
+# --errors-for-leak-kinds=all makes EVERY leak kind (definite, indirect,
+# possible, reachable) count as an error, so --error-exitcode=99 turns
+# any byte left on the heap into a failing exit code.
+VG_OPTS="--leak-check=full --show-leak-kinds=all \
+--errors-for-leak-kinds=all --error-exitcode=99 \
 --child-silent-after-fork=yes"
 
 LOGS="$(mktemp -d)"
@@ -54,15 +57,18 @@ check_logs() {
         # Fork children that exec svn/git leave truncated logs with no
         # summary — only the tool's own processes produce a verdict.
         grep -q 'ERROR SUMMARY' "$log" || continue
+        # Zero tolerance: the process must leave nothing on the heap at
+        # all — valgrind then prints "no leaks are possible".
         if ! grep -q 'ERROR SUMMARY: 0 errors' "$log" \
-           || grep -qE 'definitely lost: [1-9]|indirectly lost: [1-9]' "$log"; then
+           || ! grep -q 'no leaks are possible' "$log"; then
             bad=1
             echo "      $(basename "$log"):"
-            grep -E 'ERROR SUMMARY|definitely lost|indirectly lost' "$log" | sed 's/^/        /'
+            grep -E 'ERROR SUMMARY|in use at exit|(definitely|indirectly|possibly) lost:|still reachable:' \
+                "$log" | sed 's/^/        /'
         fi
     done
     if [ "$bad" -eq 0 ]; then
-        echo "PASS  $name — 0 errors, 0 definite/indirect leaks"
+        echo "PASS  $name — 0 errors, 0 bytes on the heap at exit"
     else
         echo "FAIL  $name — memcheck findings above (logs: $LOGS)"
         FAILED=1
